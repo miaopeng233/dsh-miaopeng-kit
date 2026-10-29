@@ -57,7 +57,7 @@ dsh-context、dsh-better-sidebar（宿主自带对应功能）、dsh-whale-widge
 
 宿主把主窗口写死成 1280×820，只能改 `resources\app.asar` 里的主进程。`scripts/patch-window-state.mjs`
 只替换其中的 `lib/main.js`，原文件备份为 `app.asar.miaopeng-backup`。插件每次启动都会检查：没打补丁时
-起一个等待进程，应用退出后自动补上，所以**应用自动更新后不用手动处理**，下次重启后再下一次就恢复。
+起一个等待进程，应用退出后自动补上。所以**应用自动更新后不用手动处理**：更新后第一次退出时补上，再打开就恢复。
 不想要这个补丁：在插件配置里设 `windowPatch: false`。
 
 ```powershell
