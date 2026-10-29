@@ -10,12 +10,16 @@
  *      把发给前端的 contextWindow 换成有效阈值。环、百分比、弹层里的
  *      「~120K / 400K」都由宿主原生组件渲染，不碰 DOM。
  *   3. `/dsh-miaopeng-kit/models` 路由：给前端选择器提供每个模型的窗口与阈值。
+ *   4. 窗口尺寸记忆：主进程补丁只能在应用退出后打（app.asar 运行时被占用），
+ *      所以启动时起一个分离的等待进程，退出后打补丁，下次启动生效。
  *
  * 设置保存在 ~/.dsh/dsh-miaopeng-kit/settings.json（跨重载保留，不写进插件目录）。
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const name = 'dsh-miaopeng-kit'
 
@@ -334,6 +338,25 @@ export function apply(ctx, config = {}) {
       return typeof dispose === 'function' ? dispose : undefined
     }, 'dsh-miaopeng-kit: routes')
   })
+
+  // 4. 窗口尺寸记忆补丁
+  if (process.platform === 'win32' && config.windowPatch !== false) {
+    // 宿主进程就是以 RunAsNode 运行的应用本体，安装目录由它推出。
+    const asar = join(dirname(process.execPath), 'resources', 'app.asar')
+    const script = join(dirname(fileURLToPath(import.meta.url)), 'scripts', 'patch-window-state.mjs')
+    if (existsSync(asar) && existsSync(script)) {
+      try {
+        spawn(process.execPath, [script, asar, '--after-exit'], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ELECTRON_NO_ASAR: '1' },
+        }).unref()
+      } catch (error) {
+        warn('window patch waiter failed to start', error)
+      }
+    }
+  }
 
   // 启动后同步一次：新启用的模型也能拿到覆盖策略。等其他提供方挂载完成再扫描。
   const startup = setTimeout(() => {

@@ -13,11 +13,15 @@
  *   node patch-window-state.mjs "D:\dsh\resources\app.asar"
  *   node patch-window-state.mjs "D:\dsh\resources\app.asar" --restore
  *   node patch-window-state.mjs "D:\dsh\resources\app.asar" --check
+ *   node patch-window-state.mjs "D:\dsh\resources\app.asar" --after-exit
+ *     （插件启动时以分离进程调用：已打过补丁立即退出；否则等所有 DeepSeek Harness
+ *      进程退出后再打，下次启动生效）
  *
  * 软件更新会换掉 app.asar，更新后重新运行一次即可（脚本是幂等的）。
  */
 import { createHash } from 'node:crypto'
-import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { closeSync, copyFileSync, existsSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 
 // 在 Electron 的 RunAsNode 下运行时，fs 会把 .asar 当目录透明读取；这里要按普通文件处理。
 process.noAsar = true
@@ -155,15 +159,67 @@ function patchMain(source) {
   return next
 }
 
+/** 只读头部和 main.js，用于快速判断是否已打补丁（不把整个 asar 读进内存）。 */
+function readMainSource(path) {
+  const fd = openSync(path, 'r')
+  try {
+    const head = Buffer.alloc(16)
+    readSync(fd, head, 0, 16, 0)
+    const headerPickleSize = head.readUInt32LE(4)
+    const json = Buffer.alloc(head.readUInt32LE(12))
+    readSync(fd, json, 0, json.length, 16)
+    const main = entryAt(JSON.parse(json.toString('utf8')), 'lib/main.js')
+    const content = Buffer.alloc(main.size)
+    readSync(fd, content, 0, main.size, 8 + headerPickleSize + Number(main.offset))
+    return content.toString('utf8')
+  } finally {
+    closeSync(fd)
+  }
+}
+
+if (flag === '--check') {
+  console.log(readMainSource(asarPath).includes(MARKER) ? '已打补丁' : '未打补丁')
+  process.exit(0)
+}
+
+if (flag === '--after-exit') {
+  if (readMainSource(asarPath).includes(MARKER)) process.exit(0)
+  // 同一时间只留一个等待进程。
+  const lock = `${asarPath}.miaopeng-waiting`
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+  if (existsSync(lock) && alive(Number(readFileSync(lock, 'utf8')))) process.exit(0)
+  writeFileSync(lock, String(process.pid))
+  const othersRunning = () => {
+    const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq DeepSeek Harness.exe', '/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true })
+    return out.split(/\r?\n/).some((line) => {
+      const pid = Number(/^"[^"]*","(\d+)"/.exec(line)?.[1])
+      return Number.isInteger(pid) && pid !== process.pid
+    })
+  }
+  const deadline = Date.now() + 7 * 24 * 3600 * 1000
+  try {
+    while (othersRunning()) {
+      if (Date.now() > deadline) process.exit(0)
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+    // 进程刚退出时文件句柄可能还没释放，稍等再写。
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+  } finally {
+    rmSync(lock, { force: true })
+  }
+}
+
 const archive = readArchive(asarPath)
 const entry = entryAt(archive.header, 'lib/main.js')
 const start = archive.dataOffset + Number(entry.offset)
 const source = archive.buffer.subarray(start, start + entry.size).toString('utf8')
-
-if (flag === '--check') {
-  console.log(source.includes(MARKER) ? '已打补丁' : '未打补丁')
-  process.exit(0)
-}
 
 const patched = patchMain(source)
 if (patched === null) {

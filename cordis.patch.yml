@@ -1,7 +1,69 @@
+# dsh-miaopeng-kit 组合包 patch。
+#
+# 这一个组合包就是全部：它启用随包锁定版本的 WorkBuddy（模型）和 claude-style（外观），
+# 再挂上本插件。所以无论是用宿主「插件」页按 git 地址安装，还是用 install.ps1，
+# profile 里都只需要启用 dsh-miaopeng-kit 这一个组合包。
+#
+# 下面的 config 是默认值：组合包 patch 先于用户自己的 profile patch 应用，
+# 用户在设置里改过的值总是优先。
+
 - insert:
+    - id: workbuddy
+      name: '@huai_xin/dsh-workbuddy'
+      config: {}
+    - id: ui-skin-claude-style
+      name: 'dsh-claude-style'
+      config:
+        brand: deepseek
+        brandInk: text
+        paletteColors: claude
+        motion: full
+        modelPicker: true
+        quickProviders: []
+        pageZoom: "1"
+        sodium: on
+        banLocale: off
+        homeLayout: classic
+        homeRipple: true
+        palette: claude
+        typeface: claude
+        conversationWidth: "1"
+        composerBottomGap: roomy
+        mascot: deepy
+        mascotScope: all
+        permissionsControl: true
+        statsPosition: footer
+        contextDisplay: pie
+        contextNumbers: true
+        statsFooterAlign: left
+        billingCurrency: off
+        searchStyle: icon
+        sidebarLayout: relaxed
+        ongoingIndicator: ring
+        chatReveal: off
+        processRows: flat
     - id: miaopeng-kit
       name: 'dsh-miaopeng-kit'
       config:
         # 首次安装时的自动压缩阈值；之后以 /autocompact 的设置为准
         # （保存在 ~/.dsh/dsh-miaopeng-kit/settings.json）。
         autocompact: 400K
+        # 自动给主进程打「记住窗口大小」补丁（在应用退出后进行，下次启动生效）。
+        windowPatch: true
+
+# 默认界面设置（中文、紧凑的性能统计、字号）。
+- id: ui-chat
+  name: "@deepseek-ai/dsh-client-ui-chat"
+  config:
+    transcriptView: standard
+    performanceUsage: compact
+- id: locale
+  name: "@deepseek-ai/dsh-client-locale"
+  config:
+    preference: zh
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    fontSize: 16
+    codeFontSize: 12
+    terminalFontSize: 15

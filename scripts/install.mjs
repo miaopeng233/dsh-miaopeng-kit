@@ -4,13 +4,14 @@
  *
  *   node install.mjs --app "D:\dsh" [--profile <dir>] [--no-window-patch] [--uninstall]
  *
- * 安装后 profile 的依赖里只有 dsh-miaopeng-kit 一项；它锁定版本带上 claude-style（外观）
- * 和 WorkBuddy（模型），其余被它取代或与它重复的插件全部移除。
+ * 安装后 profile 的依赖和组合包列表里都只有 dsh-miaopeng-kit 一项：它锁定版本带上
+ * claude-style（外观）和 WorkBuddy（模型），并在自己的组合包 patch 里启用它们；
+ * 其余被它取代或与它重复的插件全部移除。
  *
  * 步骤：
  *   1. 复制本插件到 <profile>/plugins/dsh-miaopeng-kit；
- *   2. 改写 profile 的 package.json：依赖只留本插件，bundle 按 package.json 的 dsh.kit 设置；
- *   3. 清理被移除插件留在 cordis.patch.yml 里的配置段，追加 defaults.patch.yml 里缺少的界面配置；
+ *   2. 改写 profile 的 package.json：依赖和组合包只留本插件；
+ *   3. 清理被移除插件留在 cordis.patch.yml 里的配置段；
  *   4. 用应用自带的 pnpm 安装；
  *   5. 给主进程打「记住窗口大小」补丁（--no-window-patch 跳过）。
  * 运行前请完全退出 DeepSeek Harness（包括托盘）；install.ps1 会自动处理。
@@ -23,7 +24,7 @@ import { fileURLToPath } from 'node:url'
 
 const NAME = 'dsh-miaopeng-kit'
 const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
-const PACKAGE_FILES = ['package.json', 'index.js', 'client.js', 'cordis.patch.yml', 'defaults.patch.yml', 'README.md', 'scripts']
+const PACKAGE_FILES = ['package.json', 'index.js', 'client.js', 'cordis.patch.yml', 'README.md', 'scripts']
 
 const args = process.argv.slice(2)
 const option = (flag) => {
@@ -59,12 +60,12 @@ manifest.dsh.profile ??= {}
 const bundles = (manifest.dsh.profile.bundles ?? BASE_BUNDLES).filter((name) => !managed.has(name))
 if (!uninstall) {
   manifest.dependencies[NAME] = `file:./plugins/${NAME}`
-  bundles.push(...kit.bundles, NAME)
+  bundles.push(NAME)
 }
 manifest.dsh.profile.bundles = bundles
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 
-// 3. 配置：删掉被移除插件的配置段（指向不存在条目的配置会让加载报错），再追加缺少的默认配置
+// 3. 配置：删掉被移除插件的配置段（指向不存在条目的配置会让加载报错）
 const patchPath = join(profileDir, 'cordis.patch.yml')
 // 一段从 "- id:" 起，到下一段或顶层注释为止（注释属于后面那一段，删除时保留）。
 const blockPattern = /^- (?:id|insert): [\s\S]*?(?=^- (?:id|insert): |^#|(?![\s\S]))/gm
@@ -74,17 +75,6 @@ patch = patch.replace(blockPattern, (block) => {
   const id = /^- id: (\S+)/.exec(block)?.[1]
   return id !== undefined && dropIds.has(id) ? '' : block
 })
-if (!uninstall && existsSync(join(root, 'defaults.patch.yml'))) {
-  const present = new Set([...patch.matchAll(/^- id: (\S+)/gm)].map((match) => match[1]))
-  const defaults = readFileSync(join(root, 'defaults.patch.yml'), 'utf8').replace(/\r\n/g, '\n').match(blockPattern) ?? []
-  const missing = defaults.filter((block) => !present.has(/^- id: (\S+)/.exec(block)[1]))
-  if (missing.length > 0) {
-    // 空 profile 的 patch 是 "[]"，追加条目前换成块序列。
-    if (!/^- /m.test(patch)) patch = patch.replace(/^\s*\[\]\s*$/m, '')
-    patch = `${patch.replace(/\n*$/, '\n')}${missing.map((block) => block.replace(/\n*$/, '\n')).join('')}`
-    console.log(`已追加默认配置：${missing.map((block) => /^- id: (\S+)/.exec(block)[1]).join(', ')}`)
-  }
-}
 writeFileSync(patchPath, patch)
 
 // 4. 安装
@@ -99,6 +89,15 @@ execFileSync(process.execPath, [pnpm, 'install', '--prefer-offline', '--config.c
   stdio: 'inherit',
   env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
 })
+
+// pnpm 认为本地目录依赖「已是最新」时不会重新复制，升级后 node_modules 里会留着旧文件；
+// 这里直接同步一遍，保证运行的就是刚装的版本。
+if (!uninstall) {
+  const installed = join(profileDir, 'node_modules', NAME)
+  for (const file of PACKAGE_FILES) {
+    if (existsSync(join(root, file))) cpSync(join(root, file), join(installed, file), { recursive: true, force: true })
+  }
+}
 
 // 5. 窗口补丁
 if (!uninstall && !args.includes('--no-window-patch')) {

@@ -1,6 +1,6 @@
 {
   "name": "dsh-miaopeng-kit",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "miaopeng 的 DeepSeek Harness 整合插件：外观（claude-style）+ WorkBuddy 模型 + /autocompact + 按阈值的上下文环 + 模型选择器改版 + 窗口尺寸记忆",
@@ -11,21 +11,28 @@
     "./client": "./client.js",
     "./package.json": "./package.json"
   },
-  "files": ["index.js", "client.js", "cordis.patch.yml", "defaults.patch.yml", "scripts", "README.md"],
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "scripts",
+    "README.md"
+  ],
   "dependencies": {
     "dsh-claude-style": "0.19.5",
     "@huai_xin/dsh-workbuddy": "0.8.3"
   },
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "immediately": true,
       "inject": []
     },
     "kit": {
-      "$comment": "随本插件一起启用的上游插件（版本锁定在 dependencies 里）。顺序即加载顺序，本插件总在最后。",
-      "bundles": ["@huai_xin/dsh-workbuddy", "dsh-claude-style"],
+      "$comment": "install.ps1 用：安装时移除这些被本插件取代或重复的插件，以及它们留在 profile patch 里的配置段。 bundles 列出由本组合包代为启用的插件，它们不应再单独出现在 profile 的组合包列表里。",
       "remove": [
         "dshmarket",
         "dsh-better-sidebar",
@@ -36,7 +43,14 @@
         "dsh-context-threshold-mark",
         "dsh-spider-kit"
       ],
-      "removePatchIds": ["better-sidebar", "dsh-context"]
+      "removePatchIds": [
+        "better-sidebar",
+        "dsh-context"
+      ],
+      "bundles": [
+        "@huai_xin/dsh-workbuddy",
+        "dsh-claude-style"
+      ]
     }
   }
 }
