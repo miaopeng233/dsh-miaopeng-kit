@@ -1,0 +1,7 @@
+- insert:
+    - id: miaopeng-kit
+      name: 'dsh-miaopeng-kit'
+      config:
+        # 首次安装时的自动压缩阈值；之后以 /autocompact 的设置为准
+        # （保存在 ~/.dsh/dsh-miaopeng-kit/settings.json）。
+        autocompact: 400K

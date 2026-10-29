@@ -1,0 +1,48 @@
+# 默认界面配置：安装时只追加目标 profile 里还没有的条目，不覆盖别人已有的设置。
+- id: ui-chat
+  name: "@deepseek-ai/dsh-client-ui-chat"
+  config:
+    transcriptView: standard
+    performanceUsage: compact
+- id: locale
+  name: "@deepseek-ai/dsh-client-locale"
+  config:
+    preference: zh
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    preference: light
+    fontSize: 16
+    codeFontSize: 12
+    terminalFontSize: 15
+- id: ui-skin-claude-style
+  name: dsh-claude-style
+  config:
+    brand: deepseek
+    brandInk: text
+    paletteColors: claude
+    motion: full
+    modelPicker: true
+    quickProviders: []
+    pageZoom: "1"
+    sodium: on
+    banLocale: off
+    homeLayout: classic
+    homeRipple: true
+    palette: claude
+    typeface: claude
+    conversationWidth: "1"
+    composerBottomGap: roomy
+    mascot: deepy
+    mascotScope: all
+    permissionsControl: true
+    statsPosition: footer
+    contextDisplay: pie
+    contextNumbers: true
+    statsFooterAlign: left
+    billingCurrency: off
+    searchStyle: icon
+    sidebarLayout: relaxed
+    ongoingIndicator: ring
+    chatReveal: off
+    processRows: flat
