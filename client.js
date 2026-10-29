@@ -168,7 +168,7 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
 .dsh-claude-inline-stats[data-mpk-stats] [data-mpk-short]::after {
   content: attr(data-mpk-short); font-size: var(--mpk-stats-size, 12px); font-variant-numeric: tabular-nums;
 }
-.dsh-claude-inline-stats[data-mpk-stats] .dsh-claude-inline-cost[data-mpk-tone="free"]::after { color: #15803d; font-weight: 600; }
+.dsh-claude-inline-stats[data-mpk-stats] .dsh-claude-inline-cost[data-mpk-tone="free"]::after { font-weight: 600; }
 .dsh-claude-inline-stats[data-mpk-stats] { cursor: pointer; }
 
 .mpk-stats-pop {
@@ -184,18 +184,32 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
 .mpk-stats-pop .mpk-row > span:first-child { color: var(--dsw-alias-label-secondary, #70686a); }
 .mpk-stats-pop .mpk-row[data-current] > span:first-child { color: inherit; font-weight: 600; }
 .mpk-stats-pop .mpk-note { margin-top: 4px; font-size: 11px; color: var(--dsw-alias-label-tertiary, #91888a); }
-.mpk-stats-pop .mpk-free { color: #15803d; font-weight: 600; }
+.mpk-stats-pop .mpk-free { font-weight: 600; }
 /* 每条回答下方的本轮用量：跟在时间后面的一行小字。 */
 .mpk-turn-usage {
   margin-left: 8px; font-size: 12px; color: var(--dsw-alias-label-tertiary, #91888a);
   font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default;
 }
+/* 上下文百分比：占用低时用中性色，升高后才交给主题的颜色梯度提醒。 */
+html body [data-dsh-claude-context-meter][data-dsh-claude-ramp-span="low"] button { color: var(--dsw-alias-label-secondary, #70686a) !important; }
+
+/*
+ * 推理等级：最高档的点阵保留，但不再循环闪烁——几百个方块同时做无限动画会让拖到 Max 时卡顿（实测 50–100ms 长任务）。
+ * 滑块下方按当前模型实际支持的档位标出刻度名。
+ */
+html body .dsh-claude-effort-matrix-sq.dsh-claude-effort-matrix-sq,
+html body .dsh-claude-effort-matrix-sq.dsh-claude-effort-matrix-sq::before,
+html body .dsh-claude-effort-matrix-sq.dsh-claude-effort-matrix-sq::after { animation: none !important; }
+.mpk-effort-scale { position: relative; height: 16px; margin-top: 6px; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-tertiary, #91888a); }
+.mpk-effort-scale > span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.mpk-effort-scale > span:first-child { transform: none; }
+.mpk-effort-scale > span:last-child:not(:first-child) { transform: translateX(-100%); }
+.mpk-effort-scale > span[data-current] { color: var(--dsw-alias-label-primary, #1f1e1d); font-weight: 600; }
+
 /* 英文文案换中文（只写属性，显示交给 CSS）。 */
 [data-mpk-text] { font-size: 0 !important; letter-spacing: 0 !important; }
 [data-mpk-text]::after { content: attr(data-mpk-text); font-size: var(--mpk-text-size, 12px); }
 @media (prefers-color-scheme: dark) {
-  .dsh-claude-inline-stats[data-mpk-stats] .dsh-claude-inline-cost[data-mpk-tone="free"]::after,
-  .mpk-stats-pop .mpk-free { color: #4ade80; }
   .mpk-stats-pop { box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 8px 24px rgba(0,0,0,.4); }
 }
 
@@ -209,9 +223,8 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
   color: var(--dsw-alias-label-secondary, #555);
 }
 .mpk-tag[data-tone="free"] { background: color-mix(in srgb, #16a34a 16%, transparent); color: #15803d; font-weight: 600; }
-.mpk-tag[data-tone="low"] { color: #15803d; }
 .mpk-tag[data-tone="high"] { color: #b45309; }
-.mpk-tag[data-tone="promo"] { background: transparent; box-shadow: inset 0 0 0 1px currentColor; color: #15803d; }
+.mpk-tag[data-tone="promo"] { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 40%, transparent); }
 .mpk-tag[data-tone="warn"] { background: color-mix(in srgb, #f59e0b 16%, transparent); color: #b45309; }
 .mpk-tag[data-tone="bad"] { background: color-mix(in srgb, #ef4444 14%, transparent); color: #b91c1c; }
 .mpk-busy { display: inline-flex; align-items: center; gap: 3px; color: #b45309; }
@@ -223,7 +236,7 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
 }
 .mpk-id { color: var(--dsw-alias-label-tertiary, #8a8f98); font-size: 10.5px; margin-left: 4px; font-weight: 400; }
 @media (prefers-color-scheme: dark) {
-  .mpk-tag[data-tone="free"], .mpk-tag[data-tone="low"], .mpk-tag[data-tone="promo"] { color: #4ade80; }
+  .mpk-tag[data-tone="free"] { color: #4ade80; }
   .mpk-tag[data-tone="high"], .mpk-tag[data-tone="warn"], .mpk-busy { color: #fbbf24; }
   .mpk-tag[data-tone="bad"], .mpk-busy[data-level="congested"] { color: #f87171; }
 }
@@ -425,7 +438,6 @@ window.__ModuleLoader__.load({
               const window = [promo.from, promo.until].filter(Boolean).join(' – ')
               const tag = el('span', 'mpk-tag', label, [promo.text, window, promo.discounted ? `折后 ${promo.discounted}` : ''].filter(Boolean).join('\n') || label)
               tag.dataset.tone = 'promo'
-              if (typeof promo.color === 'string' && /^#[0-9a-f]{3,8}$/i.test(promo.color)) tag.style.color = promo.color
               meta.append(tag)
             }
           }
@@ -661,7 +673,7 @@ window.__ModuleLoader__.load({
         function formatMoney(amount, currency) {
           const symbol = currency === 'USD' ? '$' : '¥'
           if (!Number.isFinite(amount)) return null
-          return `${symbol}${amount >= 1 ? amount.toFixed(2) : amount.toFixed(4)}`
+          return `${symbol}${amount >= 1 ? amount.toFixed(2) : amount >= 0.01 ? amount.toFixed(3) : amount.toFixed(4)}`
         }
         const formatCredits = (value) => `${Math.round(value * 100) / 100} 积分`
 
@@ -700,8 +712,8 @@ window.__ModuleLoader__.load({
         }
         function totalsText(totals) {
           const parts = []
-          if (totals.hasMoney) parts.push(formatMoney(totals.money, totals.currency))
-          if (totals.hasCredits) parts.push(formatCredits(totals.credits))
+          if (totals.hasMoney && totals.money > 0) parts.push(formatMoney(totals.money, totals.currency))
+          if (totals.hasCredits && totals.credits > 0) parts.push(formatCredits(totals.credits))
           return parts.join(' + ')
         }
 
@@ -749,15 +761,18 @@ window.__ModuleLoader__.load({
           if (root === null) return
           setAttr(root, 'data-mpk-stats', '')
           setAttr(root, 'title', '点击查看本会话用量')
-          const size = getComputedStyle(root).fontSize
-          if (root.style.getPropertyValue('--mpk-stats-size') !== size) root.style.setProperty('--mpk-stats-size', size)
+          if (!root.style.getPropertyValue('--mpk-stats-size')) root.style.setProperty('--mpk-stats-size', getComputedStyle(root).fontSize)
 
           const cost = root.querySelector('.dsh-claude-inline-cost')
           const total = root.querySelector('.dsh-claude-inline-total')
           for (const seg of root.querySelectorAll(':scope > .dsh-claude-inline-seg')) {
             setAttr(seg, 'data-mpk-show', seg.contains(cost) || seg.contains(total) ? '' : null)
           }
-          if (total !== null) setAttr(total, 'data-mpk-short', `${shortCount(numberIn(total))} tok`)
+          if (total !== null) {
+            const value = numberIn(total)
+            setAttr(total, 'data-mpk-short', `共 ${shortCount(value)} tokens`)
+            setAttr(total.closest('.dsh-claude-inline-seg'), 'title', `本会话累计 ${value.toLocaleString('zh-CN')} tokens（输入 + 输出）`)
+          }
           if (cost !== null && session !== null) {
             const line = costLine(session)
             setAttr(cost, 'data-mpk-short', line.text)
@@ -952,6 +967,39 @@ window.__ModuleLoader__.load({
           setAttr(node, 'data-mpk-text', text)
         }
 
+        /** 推理等级弹层：滑块下方按当前模型支持的档位标出刻度名。 */
+        const EFFORT_NAMES = { off: 'Off', none: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', max: 'Max' }
+        function decorateEffort() {
+          const box = document.querySelector('.dsh-claude-effort-popover[data-open="true"] .dsh-claude-effort')
+          if (box === null) return
+          const track = box.querySelector('.dsh-claude-effort-track')
+          const ticks = [...box.querySelectorAll('.dsh-claude-effort-tick')]
+          const trigger = document.querySelector('[data-slot="conversation.input.model.label"]')?.closest('[data-provider-id]')
+          const model = models.find((entry) => entry.provider === trigger?.getAttribute('data-provider-id') && entry.id === trigger?.getAttribute('data-model-id'))
+          let names = (model?.efforts ?? []).map((id) => EFFORT_NAMES[id] ?? id)
+          if (names.length === ticks.length + 1 && names[0] === 'Off') names = names.slice(1)
+          let scale = box.querySelector(':scope > .mpk-effort-scale')
+          if (track === null || ticks.length < 2 || names.length !== ticks.length) {
+            scale?.remove()
+            return
+          }
+          const current = track.getAttribute('aria-valuetext') ?? ''
+          const signature = `${names.join('/')}|${current}|${ticks.map((tick) => tick.style.left).join(',')}`
+          if (scale?.getAttribute(SIGNATURE_ATTR) === signature) return
+          if (scale === null) {
+            scale = el('div', 'mpk-effort-scale')
+            scale.setAttribute('aria-hidden', 'true')
+            track.after(scale)
+          }
+          scale.setAttribute(SIGNATURE_ATTR, signature)
+          scale.replaceChildren(...names.map((name, at) => {
+            const label = el('span', '', name)
+            label.style.left = ticks[at].style.left
+            if (name.toLowerCase() === current.toLowerCase()) label.setAttribute('data-current', '')
+            return label
+          }))
+        }
+
         /** 首页问候、权限分段按钮。 */
         function decorateLabels() {
           for (const node of document.querySelectorAll('[data-dsh-claude-part="hero-title-group"] > span:not([class])')) {
@@ -962,20 +1010,28 @@ window.__ModuleLoader__.load({
           }
           decorateContextPanel()
           decorateUsage()
+          decorateEffort()
         }
         // 首页一出现就要换掉英文，所以观察节点增删（不看文字和属性，开销很小），合并到下一帧处理。
+        // 生成回答时节点变化很密，所以节流：最多每 150ms 一次，第一次立即在下一帧处理（问候语不闪英文）。
         let labelsQueued = false
+        let labelsAt = 0
+        let labelsTimer
+        const runLabels = () => {
+          labelsQueued = false
+          labelsAt = performance.now()
+          try {
+            decorateLabels()
+          } catch (error) {
+            console.warn('[dsh-miaopeng-kit] labels failed', error)
+          }
+        }
         const labelsObserver = new MutationObserver(() => {
           if (labelsQueued) return
           labelsQueued = true
-          requestAnimationFrame(() => {
-            labelsQueued = false
-            try {
-              decorateLabels()
-            } catch (error) {
-              console.warn('[dsh-miaopeng-kit] labels failed', error)
-            }
-          })
+          const wait = labelsAt + 150 - performance.now()
+          if (wait <= 0) requestAnimationFrame(runLabels)
+          else labelsTimer = setTimeout(() => requestAnimationFrame(runLabels), wait)
         })
         labelsObserver.observe(document.body, { childList: true, subtree: true })
         // 统计数字在生成时频繁变化，React 会反复重写文本；每秒对齐一次属性即可，
@@ -984,6 +1040,7 @@ window.__ModuleLoader__.load({
           if (document.visibilityState !== 'visible') return
           try {
             decorateStats()
+            decorateEffort()
           } catch (error) {
             console.warn('[dsh-miaopeng-kit] stats failed', error)
           }
@@ -1013,6 +1070,8 @@ window.__ModuleLoader__.load({
           for (const type of ['click', 'pointerdown', 'mousedown']) document.removeEventListener(type, onStatsClick, true)
           document.removeEventListener('keydown', onStatsKey, true)
           labelsObserver.disconnect()
+          clearTimeout(labelsTimer)
+          for (const node of document.querySelectorAll('.mpk-effort-scale')) node.remove()
           for (const node of document.querySelectorAll('[data-mpk-text]')) node.removeAttribute('data-mpk-text')
           for (const node of document.querySelectorAll('[data-mpk-stats], [data-mpk-show], [data-mpk-short], [data-mpk-first]')) {
             for (const name of ['data-mpk-stats', 'data-mpk-show', 'data-mpk-short', 'data-mpk-tone', 'data-mpk-first']) node.removeAttribute(name)

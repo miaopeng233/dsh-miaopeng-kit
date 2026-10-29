@@ -23,4 +23,11 @@ Remove-Item $source -Recurse -Force -ErrorAction SilentlyContinue
 Move-Item (Get-ChildItem $staging | Select-Object -First 1).FullName $source
 Remove-Item $staging, $zip -Recurse -Force -ErrorAction SilentlyContinue
 
-& (Join-Path $source "install.ps1") -App $App
+# Run install.ps1 in a child PowerShell with -ExecutionPolicy Bypass: the default policy (Restricted /
+# RemoteSigned plus the downloaded zip's mark-of-the-web) would otherwise refuse to run a local script.
+Get-ChildItem $source -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
+$shell = (Get-Process -Id $PID).Path
+$arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $source "install.ps1"))
+if ($App) { $arguments += @("-App", $App) }
+& $shell @arguments
+if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed with exit code $LASTEXITCODE" }

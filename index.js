@@ -350,7 +350,7 @@ export function apply(ctx, config = {}) {
             res.end(body)
           }
           if (!/^session-[\w-]+$/.test(sessionId)) return reply(400, { error: 'bad session' })
-          turnUsage(sessionId, params.has('debug'), params.get('currency') === 'USD' ? 'USD' : 'CNY').then((turns) => reply(200, { turns }), (error) => reply(500, { error: String(error?.message ?? error) }))
+          turnUsage(sessionId, params.get('currency') === 'USD' ? 'USD' : 'CNY').then((turns) => reply(200, { turns }), (error) => reply(500, { error: String(error?.message ?? error) }))
         },
       })
       return () => {
@@ -392,13 +392,8 @@ export function apply(ctx, config = {}) {
     return tier === null ? { kind: 'tokens' } : { kind: 'money', currency, tier }
   }
 
-  async function turnUsage(sessionId, debug, currency) {
+  async function turnUsage(sessionId, currency) {
     const events = await readSessionEvents(sessionId)
-    if (debug) {
-      return events.filter((event) => event?.type === 'assistant/message').slice(-2).map((event) => ({
-        time: event.time, turn: event.data?.turn, step: event.data?.step, usage: event.data?.usage, source: event.data?.message?.source,
-      }))
-    }
     const steps = new Map()
     for (const event of events) {
       if (event?.type !== 'assistant/message') continue
