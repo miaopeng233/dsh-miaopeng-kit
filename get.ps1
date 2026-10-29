@@ -1,9 +1,9 @@
 # dsh-miaopeng-kit online installer (kept ASCII-only so `irm | iex` decodes it the same everywhere).
-#   irm https://raw.githubusercontent.com/OWNER/dsh-miaopeng-kit/main/get.ps1 | iex
+#   irm https://raw.githubusercontent.com/miaopeng233/dsh-miaopeng-kit/main/get.ps1 | iex
 # With a custom app folder:
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/OWNER/dsh-miaopeng-kit/main/get.ps1))) -App "E:\dsh"
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/miaopeng233/dsh-miaopeng-kit/main/get.ps1))) -App "E:\dsh"
 param(
-  [string]$Repo = "OWNER/dsh-miaopeng-kit",
+  [string]$Repo = "miaopeng233/dsh-miaopeng-kit",
   [string]$Ref = "main",
   [string]$App = ""
 )

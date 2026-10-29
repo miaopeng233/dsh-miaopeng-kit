@@ -18,7 +18,7 @@ miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了。
 
 ## 安装方式一：应用内「插件」页
 
-插件 → 安装 → 填 `github:OWNER/dsh-miaopeng-kit`。外观、WorkBuddy、上下文洞察、插件市场、右侧边栏和默认设置随之一起生效；
+插件 → 安装 → 填 `github:miaopeng233/dsh-miaopeng-kit`。外观、WorkBuddy、上下文洞察、插件市场、右侧边栏和默认设置随之一起生效；
 窗口尺寸记忆会在第一次退出应用后自动补上，下次启动生效。已经单独装过其中某些插件也没关系，宿主会去重。
 
 ## 安装方式二：一行命令（会顺带清理被取代的旧插件）
@@ -26,7 +26,7 @@ miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了。
 先安装 DeepSeek Harness 并启动一次，然后在 PowerShell 里粘贴：
 
 ```powershell
-irm https://raw.githubusercontent.com/OWNER/dsh-miaopeng-kit/main/get.ps1 | iex
+irm https://raw.githubusercontent.com/miaopeng233/dsh-miaopeng-kit/main/get.ps1 | iex
 ```
 
 它会下载本仓库、自动找到应用安装位置、退出应用、装好插件并打窗口补丁。之后重新打开 DeepSeek Harness 即可。
