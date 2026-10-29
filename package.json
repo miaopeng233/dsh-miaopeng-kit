@@ -20,7 +20,10 @@
   ],
   "dependencies": {
     "dsh-claude-style": "0.19.5",
-    "@huai_xin/dsh-workbuddy": "0.8.3"
+    "@huai_xin/dsh-workbuddy": "0.8.3",
+    "dsh-context": "0.77.0",
+    "dshmarket": "1.73.1",
+    "dsh-better-sidebar": "0.28.2"
   },
   "dsh": {
     "bundle": {
@@ -34,22 +37,19 @@
     "kit": {
       "$comment": "install.ps1 用：安装时移除这些被本插件取代或重复的插件，以及它们留在 profile patch 里的配置段。 bundles 列出由本组合包代为启用的插件，它们不应再单独出现在 profile 的组合包列表里。",
       "remove": [
-        "dshmarket",
-        "dsh-better-sidebar",
-        "dsh-context",
         "@huai_xin/dsh-model-picker",
         "dsh-whale-widget",
         "dsh-model-rate-badge",
         "dsh-context-threshold-mark",
         "dsh-spider-kit"
       ],
-      "removePatchIds": [
-        "better-sidebar",
-        "dsh-context"
-      ],
+      "removePatchIds": [],
       "bundles": [
         "@huai_xin/dsh-workbuddy",
-        "dsh-claude-style"
+        "dsh-claude-style",
+        "dsh-context",
+        "dshmarket",
+        "dsh-better-sidebar"
       ]
     }
   }

@@ -136,51 +136,67 @@ ${POPOVER_SELECTOR} ${DESC_SELECTOR} {
 }
 ${POPOVER_SELECTOR} ${ROW_SELECTOR}[data-mpk-state="down"] .dsh-claude-model-copy { opacity: .5; }
 /*
- * 分组标题：吸顶、加粗、上方一条分隔线，右侧是该组模型数，滚动时始终知道自己在哪一组。
+ * 分组标题：吸顶，上方一条分隔线，滚动时始终知道自己在哪一组。
  * 主题给标题用了高优先级的 !important，这里叠加选择器把优先级压过去。
  */
 html body ${POPOVER_SELECTOR} ${RULE_SELECTOR}${RULE_SELECTOR} {
   position: sticky; top: 0; z-index: 2;
-  display: flex; align-items: baseline; gap: 6px;
-  margin: 0 !important; padding: 12px 12px 6px !important;
+  display: flex; align-items: center; min-height: 0;
+  margin: 0 !important; padding: 8px 12px 4px !important;
   background: var(--mpk-pop-bg, #fff);
   border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
 }
-html body ${POPOVER_SELECTOR} ${RULE_SELECTOR}${RULE_SELECTOR}[data-mpk-first] { border-top-color: transparent; padding-top: 8px !important; }
-/* 主题用 ::after 画标题后的细线；这里改成显示模型数，分隔交给上边框。 */
-html body ${POPOVER_SELECTOR} ${RULE_SELECTOR}${RULE_SELECTOR}[data-mpk-count]::after {
-  content: attr(data-mpk-count) !important; display: inline !important; flex: none !important;
-  width: auto !important; height: auto !important; margin: 0 !important; border: 0 !important; background: none !important;
-  font-size: 11px !important; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, #91888a);
-}
+html body ${POPOVER_SELECTOR} ${RULE_SELECTOR}${RULE_SELECTOR}[data-mpk-first] { border-top-color: transparent; padding-top: 6px !important; }
+/* 主题用 ::after 在标题后画细线；分隔已经交给上边框，这里去掉。 */
+html body ${POPOVER_SELECTOR} ${RULE_SELECTOR}${RULE_SELECTOR}::after { display: none !important; }
 html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}${RULE_NAME_SELECTOR} {
-  font-size: 12px !important; font-weight: 600 !important; letter-spacing: 0 !important;
+  font-size: 12px !important; line-height: 18px !important; font-weight: 600 !important; letter-spacing: 0 !important;
   color: var(--dsw-alias-label-secondary, #70686a) !important; text-transform: none !important;
 }
 html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATTR}][${GROUP_ATTR}] { font-size: 0 !important; }
 html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATTR}][${GROUP_ATTR}]::after { content: attr(${GROUP_ATTR}); font-size: 12px !important; }
 
 /*
- * 底部对话统计：箭头换成「输入 / 输出」文字，长数字按万 / 亿缩写（悬停看精确值），
- * 缓存命中率带上标签；WorkBuddy 模型的金额换成积分。
+ * 底部对话统计：只留一眼要看的两项——本会话花费（WorkBuddy 换成积分）和总 token；
+ * 输入 / 输出 / 缓存 / 速度 / 轮数点开看（本插件自己的弹层，从统计栏上方弹出）。
  * 文字节点归 React 所有，所以只写属性，显示交给 CSS。
  */
-.dsh-claude-inline-stats[data-mpk-stats] .dsh-claude-inline-arrow { display: none !important; }
-.dsh-claude-inline-stats[data-mpk-stats] [data-mpk-label]::before {
-  content: attr(data-mpk-label); margin-right: 3px; color: var(--dsw-alias-label-tertiary, #91888a);
-}
-.dsh-claude-inline-stats[data-mpk-stats] [data-dsh-claude-ramp="cache"] .dsh-claude-inline-label[hidden] { display: inline !important; }
+.dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg { display: none !important; }
+.dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-show] { display: inline-flex !important; align-items: baseline; }
 .dsh-claude-inline-stats[data-mpk-stats] [data-mpk-short] { font-size: 0 !important; letter-spacing: 0 !important; }
 .dsh-claude-inline-stats[data-mpk-stats] [data-mpk-short] > * { display: none !important; }
 .dsh-claude-inline-stats[data-mpk-stats] [data-mpk-short]::after {
   content: attr(data-mpk-short); font-size: var(--mpk-stats-size, 12px); font-variant-numeric: tabular-nums;
 }
 .dsh-claude-inline-stats[data-mpk-stats] .dsh-claude-inline-cost[data-mpk-tone="free"]::after { color: #15803d; font-weight: 600; }
-/* 推理等级：英文档位名换成中文（只写属性，显示交给 CSS）。 */
+.dsh-claude-inline-stats[data-mpk-stats] { cursor: pointer; }
+
+.mpk-stats-pop {
+  position: fixed; z-index: 1000; width: 300px; box-sizing: border-box; padding: 12px 14px;
+  background: var(--mpk-pop-bg, #fff); color: var(--dsw-alias-label-primary, #1f1e1d);
+  border-radius: 12px; font-size: 12px; line-height: 18px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 9%, transparent), 0 8px 24px rgba(0,0,0,.12);
+  font-variant-numeric: tabular-nums;
+}
+.mpk-stats-pop h4 { margin: 0 0 6px; font-family: inherit; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary, #70686a); }
+.mpk-stats-pop section + section { margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, currentColor 9%, transparent); }
+.mpk-stats-pop .mpk-row { display: flex; justify-content: space-between; gap: 12px; }
+.mpk-stats-pop .mpk-row > span:first-child { color: var(--dsw-alias-label-secondary, #70686a); }
+.mpk-stats-pop .mpk-row[data-current] > span:first-child { color: inherit; font-weight: 600; }
+.mpk-stats-pop .mpk-note { margin-top: 4px; font-size: 11px; color: var(--dsw-alias-label-tertiary, #91888a); }
+.mpk-stats-pop .mpk-free { color: #15803d; font-weight: 600; }
+/* 每条回答下方的本轮用量：跟在时间后面的一行小字。 */
+.mpk-turn-usage {
+  margin-left: 8px; font-size: 12px; color: var(--dsw-alias-label-tertiary, #91888a);
+  font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default;
+}
+/* 英文文案换中文（只写属性，显示交给 CSS）。 */
 [data-mpk-text] { font-size: 0 !important; letter-spacing: 0 !important; }
 [data-mpk-text]::after { content: attr(data-mpk-text); font-size: var(--mpk-text-size, 12px); }
 @media (prefers-color-scheme: dark) {
-  .dsh-claude-inline-stats[data-mpk-stats] .dsh-claude-inline-cost[data-mpk-tone="free"]::after { color: #4ade80; }
+  .dsh-claude-inline-stats[data-mpk-stats] .dsh-claude-inline-cost[data-mpk-tone="free"]::after,
+  .mpk-stats-pop .mpk-free { color: #4ade80; }
+  .mpk-stats-pop { box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 8px 24px rgba(0,0,0,.4); }
 }
 
 .${META_CLASS} {
@@ -217,8 +233,6 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
  * 斜杠菜单里没有图标和中文标题的命令，按内置命令的写法补齐。
  * 图标取宿主自己的图标库，和内置命令风格一致。
  */
-const EFFORT_LABELS = { none: '关闭', off: '关闭', minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' }
-const EFFORT_SELECTOR = '.dsh-claude-effort-btn-label, .dsh-claude-effort-value, .dsh-claude-effort-value-preview'
 
 /** 权限分段按钮（claude-style 写死英文）→ 与会话页「完全权限」一致的中文。 */
 const SEGMENT_LABELS = { Read: '只读', Edit: '编辑', Auto: '自动', Yolo: '完全权限' }
@@ -462,7 +476,6 @@ window.__ModuleLoader__.load({
           let group = 0
           let index = 0
           const ruleNodes = []
-          const counts = []
           const background = getComputedStyle(popover).backgroundColor
           if (popover.style.getPropertyValue('--mpk-pop-bg') !== background) popover.style.setProperty('--mpk-pop-bg', background)
           for (const node of popover.querySelectorAll(`${RULE_SELECTOR}, ${ROW_SELECTOR}`)) {
@@ -470,7 +483,6 @@ window.__ModuleLoader__.load({
             if (node.matches(RULE_SELECTOR)) {
               group += 1
               ruleNodes.push(node)
-              counts.push(0)
               setOrder(node, group * 10000)
               const nameNode = node.querySelector(RULE_NAME_SELECTOR)
               if (nameNode === null) continue
@@ -485,7 +497,6 @@ window.__ModuleLoader__.load({
               seen.clear()
               continue
             }
-            if (counts.length > 0) counts[counts.length - 1] += 1
             const key = rowKey(node)
             const occurrence = seen.get(key.full) ?? 0
             seen.set(key.full, occurrence + 1)
@@ -511,7 +522,6 @@ window.__ModuleLoader__.load({
           }
           ruleNodes.forEach((rule, at) => {
             setAttr(rule, 'data-mpk-first', at === 0 ? '' : null)
-            setAttr(rule, 'data-mpk-count', `${counts[at]} 个`)
           })
         }
 
@@ -520,26 +530,6 @@ window.__ModuleLoader__.load({
           if (value === null) {
             if (node.hasAttribute(name)) node.removeAttribute(name)
           } else if (node.getAttribute(name) !== value) node.setAttribute(name, value)
-        }
-
-        // ---------- 底部对话统计 ----------
-
-        /**
-         * WorkBuddy 积分余额：region → { total, start, at }。
-         * WorkBuddy 不按请求返回扣费，「本次已用」= 本次启动后第一次读到的余额 − 当前余额，
-         * 是唯一准确的实时消耗；每 30 秒刷新一次。
-         */
-        const credits = new Map()
-        function ensureCredits(region) {
-          const held = credits.get(region)
-          if (held !== undefined && Date.now() - held.at < 30000) return held
-          credits.set(region, { ...held, at: Date.now() })
-          fetchJson(`/workbuddy/credits?region=${region}`).then((json) => {
-            const total = json?.credits?.ok ? json.credits.total : undefined
-            const previous = credits.get(region)
-            credits.set(region, { total: total ?? previous?.total, start: previous?.start ?? total, at: Date.now() })
-          })
-          return held
         }
 
         /** 选择器里打勾的那一行：所在分组（提供方）+ 匹配到的模型数据。弹层关闭时行仍在 DOM 里。 */
@@ -571,54 +561,346 @@ window.__ModuleLoader__.load({
         }
         const numberIn = (node) => Number((node?.textContent ?? '').replace(/[^\d.]/g, ''))
 
+        // ---------- 用量与费用：用什么付费就按什么记 ----------
+        //
+        // 宿主端 /dsh-miaopeng-kit/turns 按轮给出 token 与计费方式（money / credits / tokens）。
+        // 积分没有逐次扣费回执，所以每轮结束后实测余额变化，记在本机（localStorage），
+        // 底栏、统计弹层、上下文弹层里的「费用」和每条回答下方的小字都用同一份数据。
+
+        /** WorkBuddy 积分余额：region → { total, at }，30 秒内复用。 */
+        const credits = new Map()
+        /** 计量锚点：region → 上一次结算时的余额。只在一轮结算时移动，后台刷新不动它。 */
+        const anchors = new Map()
+        function ensureCredits(region, force = false) {
+          const held = credits.get(region)
+          if (!force && held !== undefined && Date.now() - held.at < 30000) return Promise.resolve(held)
+          credits.set(region, { ...held, at: Date.now() })
+          return fetchJson(`/workbuddy/credits?region=${region}`).then((json) => {
+            const total = json?.credits?.ok ? json.credits.total : undefined
+            const next = { total: total ?? held?.total, at: Date.now() }
+            credits.set(region, next)
+            if (total !== undefined && !anchors.has(region)) anchors.set(region, total)
+            return next
+          })
+        }
+        const balanceOf = (region) => {
+          ensureCredits(region)
+          return credits.get(region)?.total
+        }
+
+        const CREDIT_LOG_KEY = 'dsh-miaopeng-kit:credits'
+        function readCreditLog() {
+          try {
+            return JSON.parse(localStorage.getItem(CREDIT_LOG_KEY) ?? '{}') ?? {}
+          } catch {
+            return {}
+          }
+        }
+        let creditLog = readCreditLog()
+        function recordCredits(key, value) {
+          creditLog = { ...creditLog, [key]: Math.round(value * 100) / 100 }
+          const keys = Object.keys(creditLog)
+          if (keys.length > 2000) for (const old of keys.slice(0, keys.length - 2000)) delete creditLog[old]
+          try {
+            localStorage.setItem(CREDIT_LOG_KEY, JSON.stringify(creditLog))
+          } catch {
+            // 存不下就只在本次运行里显示。
+          }
+        }
+
+        /** 一轮结束：等扣费落账后读余额，差值记到这一轮；晚到的扣费在第二次读取时补上。 */
+        function measureTurn(region, key) {
+          const settle = (first) => ensureCredits(region, true).then((held) => {
+            const anchor = anchors.get(region)
+            if (held.total === undefined || anchor === undefined) return
+            const spent = Math.max(0, anchor - held.total)
+            anchors.set(region, held.total)
+            if (first || spent > 0) recordCredits(key, (first ? 0 : creditLog[key] ?? 0) + spent)
+            scheduleUsage()
+          })
+          timers.push(setTimeout(() => settle(true), 4000))
+          timers.push(setTimeout(() => settle(false), 20000))
+        }
+
+        const sessionIdNow = () => document.querySelector('[data-conversation-session]')?.getAttribute('data-conversation-session') ?? null
+        /** 金额币种跟随 claude-style 的设置（它的统计栏显示 ¥ 或 $）。 */
+        const currencyNow = () => (/^\s*\$/.test(document.querySelector('.dsh-claude-inline-cost')?.textContent ?? '') ? 'USD' : 'CNY')
+
+        /** 会话 → { at, latest, turns } */
+        const turnCache = new Map()
+        let turnsLoading = null
+        function loadTurns(session, force = false) {
+          const held = turnCache.get(session)
+          const currency = currencyNow()
+          if (!force && held !== undefined && held.currency === currency && Date.now() - held.at < 15000) return
+          if (turnsLoading === session) return
+          turnsLoading = session
+          fetchJson(`/dsh-miaopeng-kit/turns?session=${encodeURIComponent(session)}&currency=${currency}`).then((json) => {
+            turnsLoading = null
+            if (!Array.isArray(json?.turns)) return
+            turnCache.set(session, { at: Date.now(), currency, turns: json.turns })
+            scheduleUsage()
+          })
+        }
+
+        /** 已结束的轮次（回答末尾的操作行出现即结束）。首次看到某个会话时只记下已有的轮次，不计量。 */
+        const seenTurns = new Map()
+        function watchTurns(session) {
+          let latest = 0
+          for (const tail of document.querySelectorAll('[data-chat-flow-kind="turn-tail"][data-chat-turn]')) {
+            latest = Math.max(latest, Number(tail.getAttribute('data-chat-turn')) || 0)
+          }
+          const seen = seenTurns.get(session)
+          seenTurns.set(session, Math.max(seen ?? 0, latest))
+          if (seen === undefined || latest <= seen) return
+          loadTurns(session, true)
+          const region = regionOf(currentProvider() ?? '')
+          if (region !== null) measureTurn(region, `${session}#${latest}`)
+        }
+
+        function formatMoney(amount, currency) {
+          const symbol = currency === 'USD' ? '$' : '¥'
+          if (!Number.isFinite(amount)) return null
+          return `${symbol}${amount >= 1 ? amount.toFixed(2) : amount.toFixed(4)}`
+        }
+        const formatCredits = (value) => `${Math.round(value * 100) / 100} 积分`
+
+        /** 一轮的花费文本；null 表示不知道（不显示）。 */
+        function turnCost(session, turn) {
+          if (turn.kind === 'money') return formatMoney(turn.amount, turn.currency)
+          if (turn.kind === 'credits') {
+            const value = creditLog[`${session}#${turn.turn}`]
+            return value === undefined ? null : formatCredits(value)
+          }
+          return null
+        }
+
+        /** 本会话合计：按计费方式分别相加。 */
+        function sessionTotals(session) {
+          const data = turnCache.get(session)
+          const totals = { money: 0, currency: data?.currency ?? currencyNow(), hasMoney: false, credits: 0, hasCredits: false, unmeasured: 0, input: 0, cacheRead: 0, output: 0, turns: 0 }
+          for (const turn of data?.turns ?? []) {
+            totals.turns += 1
+            totals.input += turn.input + turn.cacheRead
+            totals.cacheRead += turn.cacheRead
+            totals.output += turn.output
+            if (turn.kind === 'money') {
+              totals.money += turn.amount
+              totals.hasMoney = true
+            } else if (turn.kind === 'credits') {
+              const value = creditLog[`${session}#${turn.turn}`]
+              if (value === undefined) totals.unmeasured += 1
+              else {
+                totals.credits += value
+                totals.hasCredits = true
+              }
+            }
+          }
+          return { ...totals, loaded: data !== undefined }
+        }
+        function totalsText(totals) {
+          const parts = []
+          if (totals.hasMoney) parts.push(formatMoney(totals.money, totals.currency))
+          if (totals.hasCredits) parts.push(formatCredits(totals.credits))
+          return parts.join(' + ')
+        }
+
+        /** 本会话花了多少：有记录按记录；还没有花费时按当前计费方式给出「免费 / 0 积分 / ¥0」。 */
+        function spentText(session) {
+          const totals = sessionTotals(session)
+          const spent = totalsText(totals)
+          if (spent) return spent
+          const now = billingNow()
+          return now.kind === 'credits' ? (now.free ? '免费' : '0 积分') : formatMoney(0, totals.currency)
+        }
+
+        /** 当前选中模型的计费方式：{ kind: 'credits', region } | { kind: 'money' }，以及选择器里的数据。 */
+        function billingNow() {
+          ensureData()
+          const provider = currentProvider()
+          const current = currentModel()
+          const region = regionOf(provider ?? current?.label ?? '')
+          const free = current?.entry !== undefined && rankOf(current.entry) === 0
+          return region !== null ? { kind: 'credits', region, free, entry: current?.entry } : { kind: 'money', free: false, entry: current?.entry }
+        }
+
+        /** 底栏：本会话花费（按计费方式）＋（积分时）余额，后面是总 token。 */
+        function costLine(session) {
+          const totals = sessionTotals(session)
+          const now = billingNow()
+          const spent = totalsText(totals)
+          if (now.kind === 'credits') {
+            const balance = balanceOf(now.region)
+            return {
+              text: [now.free ? '免费' : null, spent ? `本会话 ${spent}` : null, balance === undefined ? null : `余 ${shortCount(balance)} 积分`].filter(Boolean).join(' · ') || '积分计费',
+              free: now.free,
+            }
+          }
+          return { text: spent ? `本会话 ${spent}` : formatMoney(0, totals.currency), free: false }
+        }
+
         function decorateStats() {
           const root = document.querySelector('.dsh-claude-inline-stats')
+          const session = sessionIdNow()
+          if (session !== null) {
+            loadTurns(session)
+            watchTurns(session)
+          }
           if (root === null) return
           setAttr(root, 'data-mpk-stats', '')
+          setAttr(root, 'title', '点击查看本会话用量')
           const size = getComputedStyle(root).fontSize
           if (root.style.getPropertyValue('--mpk-stats-size') !== size) root.style.setProperty('--mpk-stats-size', size)
 
-          for (const [selector, label] of [['.dsh-claude-inline-input', '输入'], ['.dsh-claude-inline-output', '输出']]) {
-            const figure = root.querySelector(selector)
-            if (figure === null) continue
-            const value = numberIn(figure.querySelector('.dsh-claude-digit-group') ?? figure)
-            setAttr(figure.parentElement, 'data-mpk-label', label)
-            setAttr(figure.parentElement, 'title', `累计${label} ${value.toLocaleString('zh-CN')} tokens`)
-            setAttr(figure, 'data-mpk-short', shortCount(value))
-          }
-
           const cost = root.querySelector('.dsh-claude-inline-cost')
-          if (cost === null) return
-          const provider = currentProvider()
-          const current = currentModel()
-          const region = provider !== null ? regionOf(provider) : current === null ? null : regionOf(current.label)
-          if (region === null) {
-            setAttr(cost, 'data-mpk-short', null)
-            setAttr(cost, 'data-mpk-tone', null)
-            setAttr(cost.parentElement, 'title', `按 DeepSeek 官方价格估算的本会话费用`)
-            return
+          const total = root.querySelector('.dsh-claude-inline-total')
+          for (const seg of root.querySelectorAll(':scope > .dsh-claude-inline-seg')) {
+            setAttr(seg, 'data-mpk-show', seg.contains(cost) || seg.contains(total) ? '' : null)
           }
-          ensureData()
-          const held = ensureCredits(region)
-          const balance = held?.total
-          const used = balance !== undefined && held?.start !== undefined ? Math.round((held.start - balance) * 100) / 100 : 0
-          const free = current?.entry !== undefined && rankOf(current.entry) === 0
-          const rate = current?.entry?.rate
-          const parts = [
-            free ? '免费' : null,
-            used > 0 ? `已用 ${shortCount(used)}` : null,
-            balance === undefined ? null : `余 ${shortCount(balance)} 积分`,
-          ].filter(Boolean)
-          setAttr(cost, 'data-mpk-short', parts.length > 0 ? parts.join(' · ') : '积分计费')
-          setAttr(cost, 'data-mpk-tone', free ? 'free' : null)
-          const groupName = region === 'intl' ? 'WorkBuddy 国际版' : 'WorkBuddy 国内版'
-          setAttr(cost.parentElement, 'title', [
-            `当前模型来自 ${groupName}，按积分计费${free ? '（现在免费）' : rate ? `（倍率 ${String(rate).replace(/x$/i, '×')}）` : ''}。`,
-            balance === undefined ? '' : `账户剩余 ${balance} 积分`,
-            used > 0 ? `，本次启动以来已用 ${used} 积分。` : balance === undefined ? '' : '。',
-            `${cost.textContent} 是按 DeepSeek 官方价格对整个会话的估算，不是实际扣费。`,
-          ].join(''))
+          if (total !== null) setAttr(total, 'data-mpk-short', `${shortCount(numberIn(total))} tok`)
+          if (cost !== null && session !== null) {
+            const line = costLine(session)
+            setAttr(cost, 'data-mpk-short', line.text)
+            setAttr(cost, 'data-mpk-tone', line.free ? 'free' : null)
+          }
+          if (statsPop !== null) renderStatsPop()
+          decorateUsage()
+          decorateContextPanel()
         }
+
+        // ---------- 每条回答下方：本轮用量 ----------
+
+        let usageQueued = false
+        function scheduleUsage() {
+          if (usageQueued) return
+          usageQueued = true
+          requestAnimationFrame(() => {
+            usageQueued = false
+            decorateUsage()
+            decorateContextPanel()
+          })
+        }
+        function decorateUsage() {
+          const session = sessionIdNow()
+          const data = session === null ? undefined : turnCache.get(session)
+          if (data === undefined) return
+          const byTurn = new Map(data.turns.map((turn) => [String(turn.turn), turn]))
+          for (const tail of document.querySelectorAll('[data-chat-flow-kind="turn-tail"][data-chat-turn]')) {
+            const actions = tail.querySelector('[data-clock="end"]')
+            if (actions === null) continue
+            const turn = byTurn.get(tail.getAttribute('data-chat-turn'))
+            let line = actions.querySelector(':scope > .mpk-turn-usage')
+            if (turn === undefined || turn.input + turn.cacheRead + turn.output === 0) {
+              line?.remove()
+              continue
+            }
+            const cost = turnCost(session, turn)
+            const input = turn.input + turn.cacheRead
+            const text = [`输入 ${shortCount(input)}`, `输出 ${shortCount(turn.output)}`, cost].filter(Boolean).join(' · ')
+            if (line?.getAttribute(SIGNATURE_ATTR) === text) continue
+            if (line === null) {
+              line = el('span', 'mpk-turn-usage')
+              actions.append(line)
+            }
+            line.setAttribute(SIGNATURE_ATTR, text)
+            line.textContent = text
+            const hit = input > 0 ? Math.round((turn.cacheRead / input) * 100) : 0
+            const how = turn.kind === 'money' ? '按价格表计算' : turn.kind === 'credits' ? (cost === null ? '积分未计量（这一轮在开启积分计量前或在其他设备上完成）' : '积分 = 本轮结束前后的余额差') : '这个提供方没有价格信息'
+            line.title = `${turn.model}\n输入 ${input.toLocaleString('zh-CN')} tokens（缓存命中 ${hit}%）\n输出 ${turn.output.toLocaleString('zh-CN')} tokens\n${how}`
+          }
+        }
+
+        /** 上下文环弹层里的「费用」一行，换成按计费方式的本会话花费。 */
+        function decorateContextPanel() {
+          const session = sessionIdNow()
+          if (session === null) return
+          const panel = [...document.querySelectorAll('[role="dialog"], [class*="_panel"]')].find((node) => node.textContent.includes('上下文已用'))
+          if (panel === undefined) return
+          for (const label of panel.querySelectorAll('*')) {
+            if (label.childElementCount !== 0 || label.textContent.trim() !== '费用') continue
+            const value = label.nextElementSibling ?? label.parentElement?.nextElementSibling
+            if (value === null || value === undefined) continue
+            showText(value, spentText(session))
+          }
+        }
+
+        // ---------- 统计弹层（从统计栏自己上方弹出） ----------
+
+        let statsPop = null
+        function renderStatsPop() {
+          const root = document.querySelector('.dsh-claude-inline-stats')
+          const session = sessionIdNow()
+          if (root === null || session === null || statsPop === null) return closeStatsPop()
+          const totals = sessionTotals(session)
+          const now = billingNow()
+          const row = (label, value, attrs = {}) => {
+            const node = el('div', 'mpk-row')
+            node.append(el('span', '', label), el('span', attrs.free ? 'mpk-free' : '', value))
+            if (attrs.current) node.setAttribute('data-current', '')
+            return node
+          }
+          const sections = []
+
+          const money = el('section', '')
+          money.append(el('h4', '', '费用'))
+          money.append(row('本会话', spentText(session)))
+          if (now.kind === 'credits') {
+            money.append(row('当前模型', now.free ? '免费' : now.entry?.rate ? `倍率 ${String(now.entry.rate).replace(/x$/i, '×')}` : '按积分计费', { free: now.free }))
+            for (const id of ['cn', 'intl']) {
+              const balance = balanceOf(id)
+              money.append(row(id === 'cn' ? 'WorkBuddy 国内版余额' : 'WorkBuddy 国际版余额', balance === undefined ? '读取中…' : `${balance} 积分`, { current: id === now.region }))
+            }
+            money.append(el('div', 'mpk-note', '积分按每轮结束前后的余额差计算；同一账号在别处同时使用时会一并计入。'))
+          } else {
+            money.append(el('div', 'mpk-note', '按 DeepSeek 官方峰谷价格计算；其他提供方按 claude-style 价格目录估算。'))
+          }
+          if (totals.unmeasured > 0) money.append(el('div', 'mpk-note', `${totals.unmeasured} 轮积分未计量（在开启积分计量前完成）。`))
+          sections.push(money)
+
+          const usage = el('section', '')
+          usage.append(el('h4', '', 'Token'))
+          usage.append(row('输入', totals.input.toLocaleString('zh-CN')))
+          usage.append(row('输出', totals.output.toLocaleString('zh-CN')))
+          if (totals.input > 0) usage.append(row('缓存命中', `${Math.round((totals.cacheRead / totals.input) * 100)}%`))
+          sections.push(usage)
+
+          statsPop.replaceChildren(...sections)
+          const rect = root.getBoundingClientRect()
+          const background = getComputedStyle(document.querySelector(POPOVER_SELECTOR) ?? document.body).backgroundColor
+          statsPop.style.setProperty('--mpk-pop-bg', background === 'rgba(0, 0, 0, 0)' ? '#fff' : background)
+          statsPop.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - 308))}px`
+          statsPop.style.bottom = `${innerHeight - rect.top + 8}px`
+        }
+        function openStatsPop() {
+          statsPop = el('div', 'mpk-stats-pop')
+          statsPop.setAttribute('role', 'dialog')
+          statsPop.setAttribute('aria-label', '本会话用量')
+          document.body.append(statsPop)
+          renderStatsPop()
+        }
+        function closeStatsPop() {
+          statsPop?.remove()
+          statsPop = null
+        }
+        // 捕获阶段拦下统计栏的点击：原本它会打开右侧上下文环的弹层。
+        const onStatsClick = (event) => {
+          const inside = event.target instanceof Element && event.target.closest('.dsh-claude-inline-stats[data-mpk-stats]')
+          if (inside) {
+            if (event.type === 'click') (statsPop === null ? openStatsPop : closeStatsPop)()
+            event.preventDefault()
+            event.stopPropagation()
+          } else if (statsPop !== null && event.type === 'pointerdown' && !statsPop.contains(event.target)) closeStatsPop()
+        }
+        const onStatsKey = (event) => {
+          if (event.key === 'Escape' && statsPop !== null) closeStatsPop()
+          if ((event.key === 'Enter' || event.key === ' ') && event.target instanceof Element && event.target.matches('.dsh-claude-inline-stats[data-mpk-stats]')) {
+            event.preventDefault()
+            event.stopPropagation()
+            ;(statsPop === null ? openStatsPop : closeStatsPop)()
+          }
+        }
+        for (const type of ['click', 'pointerdown', 'mousedown']) document.addEventListener(type, onStatsClick, true)
+        document.addEventListener('keydown', onStatsKey, true)
 
         // ---------- 调度 ----------
 
@@ -670,13 +952,6 @@ window.__ModuleLoader__.load({
           setAttr(node, 'data-mpk-text', text)
         }
 
-        /** 推理等级的英文档位名 → 中文。 */
-        function decorateEffort() {
-          for (const node of document.querySelectorAll(EFFORT_SELECTOR)) {
-            showText(node, EFFORT_LABELS[(node.textContent ?? '').trim().toLowerCase()] ?? null)
-          }
-        }
-
         /** 首页问候、权限分段按钮。 */
         function decorateLabels() {
           for (const node of document.querySelectorAll('[data-dsh-claude-part="hero-title-group"] > span:not([class])')) {
@@ -685,7 +960,8 @@ window.__ModuleLoader__.load({
           for (const node of document.querySelectorAll('.dsh-claude-segment')) {
             showText(node, SEGMENT_LABELS[(node.textContent ?? '').trim()] ?? null)
           }
-          decorateEffort()
+          decorateContextPanel()
+          decorateUsage()
         }
         // 首页一出现就要换掉英文，所以观察节点增删（不看文字和属性，开销很小），合并到下一帧处理。
         let labelsQueued = false
@@ -702,26 +978,12 @@ window.__ModuleLoader__.load({
           })
         })
         labelsObserver.observe(document.body, { childList: true, subtree: true })
-        // 拖动滑块时档位名即时变化，所以给模型座位和推理弹层挂文字观察器
-        // （只观察文字和子节点，不观察属性，写属性不会触发自己）。
-        const effortObserver = new MutationObserver(() => decorateEffort())
-        const effortTargets = new Set()
-        function watchEffort() {
-          for (const target of document.querySelectorAll('.dsh-claude-model-seat-effort, .dsh-claude-effort-popover')) {
-            if (effortTargets.has(target)) continue
-            effortTargets.add(target)
-            effortObserver.observe(target, { childList: true, subtree: true, characterData: true })
-          }
-          decorateEffort()
-        }
-
         // 统计数字在生成时频繁变化，React 会反复重写文本；每秒对齐一次属性即可，
         // 不挂观察器（写属性不会再触发自己）。
         const statsTimer = setInterval(() => {
           if (document.visibilityState !== 'visible') return
           try {
             decorateStats()
-            watchEffort()
           } catch (error) {
             console.warn('[dsh-miaopeng-kit] stats failed', error)
           }
@@ -747,17 +1009,19 @@ window.__ModuleLoader__.load({
         ctx.effect(() => () => {
           for (const timer of timers) clearTimeout(timer)
           clearInterval(statsTimer)
-          effortObserver.disconnect()
+          closeStatsPop()
+          for (const type of ['click', 'pointerdown', 'mousedown']) document.removeEventListener(type, onStatsClick, true)
+          document.removeEventListener('keydown', onStatsKey, true)
           labelsObserver.disconnect()
           for (const node of document.querySelectorAll('[data-mpk-text]')) node.removeAttribute('data-mpk-text')
-          for (const node of document.querySelectorAll('[data-mpk-stats], [data-mpk-label], [data-mpk-short], [data-mpk-count]')) {
-            for (const name of ['data-mpk-stats', 'data-mpk-label', 'data-mpk-short', 'data-mpk-tone', 'data-mpk-count', 'data-mpk-first']) node.removeAttribute(name)
+          for (const node of document.querySelectorAll('[data-mpk-stats], [data-mpk-show], [data-mpk-short], [data-mpk-first]')) {
+            for (const name of ['data-mpk-stats', 'data-mpk-show', 'data-mpk-short', 'data-mpk-tone', 'data-mpk-first']) node.removeAttribute(name)
           }
           bodyObserver.disconnect()
           popoverObserver?.disconnect()
           if (typeof unsubscribe === 'function') unsubscribe()
           style.remove()
-          for (const node of document.querySelectorAll(`.${META_CLASS}, .mpk-id`)) node.remove()
+          for (const node of document.querySelectorAll(`.${META_CLASS}, .mpk-id, .mpk-turn-usage`)) node.remove()
           for (const node of document.querySelectorAll(`[${SIGNATURE_ATTR}]`)) {
             node.removeAttribute(SIGNATURE_ATTR)
             node.style.order = ''

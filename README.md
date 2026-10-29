@@ -9,8 +9,8 @@ miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了。
 | `/autocompact` | 统一设置自动压缩阈值：`/autocompact 400K`、`1M`、`40%`、`off`、`default`；不带参数查看每个模型的实际阈值。窗口比阈值还小的模型按默认 80% 提前压缩。 |
 | 上下文环按阈值显示 | 环、百分比、弹层里的 `~387K / 400K` 都以压缩阈值为分母，到 100% 就是即将压缩。 |
 | 模型选择器 | 分组标题吸顶并显示模型数；每行显示 免费 / 倍率（绿=便宜，橙=贵）/ 上游促销 / 拥堵 / 不可用 / 上下文窗口；同名模型补 id；每组免费 → 促销 → 其他排序；提供方名称中文化。 |
-| 对话统计栏 | 「输入 / 输出」文字标签，大数字按万、亿缩写（悬停看精确值），缓存命中率带标签。用 WorkBuddy 模型时金额换成积分：免费标识、本次启动已用、账户余额（30 秒刷新）；人民币估算放在悬停提示里。 |
-| 中文界面 | 推理等级（低 / 高 / 最高）、权限按钮（只读 / 编辑 / 完全权限）、首页问候语。模型名、命令名等专有名词保留原文。 |
+| 用量与费用 | 用什么付费就显示什么：DeepSeek 官方按官方峰谷价显示 ¥（或 $，跟随 claude-style 币种），WorkBuddy 显示积分（每轮结束前后的余额差，免费模型显示「免费」），其他提供方按价格目录估算，没有价格就只显示 token。底栏显示本会话花费和余额；点开是费用 / 余额 / token 明细；每条回答下方一行小字显示本轮用量和花费；上下文弹层里的「费用」也换成同一口径。 |
+| 中文界面 | 权限按钮（只读 / 编辑 / 完全权限）、首页问候语。推理等级等专业术语保留英文。 |
 | 斜杠命令 | `/autocompact`、`/workbuddy` 补上图标和中文标题，和内置命令一致。 |
 | 窗口尺寸记忆 | 记住主窗口大小、位置和最大化状态（主进程补丁，见下）。 |
 
@@ -46,9 +46,11 @@ irm https://raw.githubusercontent.com/OWNER/dsh-miaopeng-kit/main/get.ps1 | iex
 
 - `dsh-claude-style` 0.19.5 — 整体外观
 - `@huai_xin/dsh-workbuddy` 0.8.3 — WorkBuddy 模型（国内版 / 国际版）
+- `dsh-context` 0.77.0 — 上下文洞察
+- `dshmarket` 1.73.1 — 插件市场
+- `dsh-better-sidebar` 0.28.2 — 右侧边栏
 
-并移除被取代或重复的插件：dshmarket（宿主自带插件管理）、dsh-model-picker（与 claude-style 的选择器重复）、
-dsh-context、dsh-better-sidebar（宿主自带对应功能）、dsh-whale-widget。前端样式因此从约 1.2MB 降到约 0.8MB。
+并移除被取代或重复的插件：dsh-model-picker（与 claude-style 的选择器重复）、dsh-whale-widget、旧的 rate-badge / threshold-mark。
 
 版本锁死是为了上游更新不会把环境弄坏；确认新版没问题后改 `package.json` 里的版本号再安装。
 `cordis.patch.yml` 是组合包 patch：启用上面两个插件并给出默认界面设置；用户自己在设置里改过的值总是优先。

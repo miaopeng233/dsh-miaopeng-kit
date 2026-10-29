@@ -19,6 +19,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'dsh-miaopeng-kit'
@@ -144,6 +145,7 @@ export function apply(ctx, config = {}) {
             name: model.name,
             window,
             output,
+            efforts: Array.isArray(info.reasoning?.efforts) ? info.reasoning.efforts.map((effort) => effort?.id ?? String(effort)) : [],
           })
           if (!outputs.has(window) || outputs.get(window) < output) outputs.set(window, output)
         } catch {
@@ -326,6 +328,7 @@ export function apply(ctx, config = {}) {
                 name: model.name,
                 contextWindow: model.window,
                 threshold: effectiveThreshold(setting, model.window, model.output),
+                efforts: model.efforts,
               })),
             }))
             res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': String(body.byteLength), 'cache-control': 'no-store' })
@@ -335,11 +338,152 @@ export function apply(ctx, config = {}) {
           ;(catalog.size === 0 || fresh ? scanModels() : Promise.resolve(catalog)).then(send, () => send(catalog))
         },
       })
-      return typeof dispose === 'function' ? dispose : undefined
+      const disposeTurns = scope.webServer.register({
+        kind: 'exact',
+        path: `${ROUTE_PREFIX}/turns`,
+        handler: (req, res) => {
+          const params = new URL(req.url ?? '/', 'http://local').searchParams
+          const sessionId = params.get('session') ?? ''
+          const reply = (status, payload) => {
+            const body = Buffer.from(JSON.stringify(payload))
+            res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': String(body.byteLength), 'cache-control': 'no-store' })
+            res.end(body)
+          }
+          if (!/^session-[\w-]+$/.test(sessionId)) return reply(400, { error: 'bad session' })
+          turnUsage(sessionId, params.has('debug'), params.get('currency') === 'USD' ? 'USD' : 'CNY').then((turns) => reply(200, { turns }), (error) => reply(500, { error: String(error?.message ?? error) }))
+        },
+      })
+      return () => {
+        if (typeof dispose === 'function') dispose()
+        if (typeof disposeTurns === 'function') disposeTurns()
+      }
     }, 'dsh-miaopeng-kit: routes')
   })
 
-  // 4. 窗口尺寸记忆补丁
+  // 4. 逐轮用量：每条回答下方显示本轮的输入 / 输出 / 费用。
+  //    读法与 claude-style 计费一致：assistant/message 带 usage，同一 (turn, step) 重试时以最后一次为准。
+  async function readSessionEvents(sessionId) {
+    const query = ctx.get('sessionQuery')
+    if (query === null || query === undefined) return []
+    if (typeof query.observeSession === 'function') {
+      const observation = await query.observeSession(sessionId, { projectionMode: 'none' })
+      try {
+        return Array.isArray(observation.events) ? observation.events : []
+      } finally {
+        if (typeof observation.dispose === 'function') observation.dispose()
+        else if (Symbol.dispose in observation) observation[Symbol.dispose]()
+      }
+    }
+    const snapshot = await query.readSession?.(sessionId)
+    return Array.isArray(snapshot?.events) ? snapshot.events : []
+  }
+
+  /**
+   * 计费方式：用户用什么付费就按什么记。
+   *   - WorkBuddy（国内版 / 国际版）→ 积分；每轮的积分由前端按余额变化实测，这里只标出地区；
+   *   - DeepSeek 官方账号 → 官方价格表（峰谷价），币种跟随 claude-style 的设置；
+   *   - 其他提供方 → claude-style 价格目录里有的按目录价，没有就只给 token。
+   * 必须先看提供方再查价：WorkBuddy 上的 deepseek-v4.1-flash 在价格表里也有官方别名。
+   */
+  function billingOf(provider, model, time, currency) {
+    const region = /dsh-workbuddy\/(cn|intl)$/.exec(provider)?.[1]
+    if (region !== undefined) return { kind: 'credits', region }
+    const tier = priceTier(provider, model, time, currency)
+    return tier === null ? { kind: 'tokens' } : { kind: 'money', currency, tier }
+  }
+
+  async function turnUsage(sessionId, debug, currency) {
+    const events = await readSessionEvents(sessionId)
+    if (debug) {
+      return events.filter((event) => event?.type === 'assistant/message').slice(-2).map((event) => ({
+        time: event.time, turn: event.data?.turn, step: event.data?.step, usage: event.data?.usage, source: event.data?.message?.source,
+      }))
+    }
+    const steps = new Map()
+    for (const event of events) {
+      if (event?.type !== 'assistant/message') continue
+      const usage = event.data?.usage
+      const turn = event.data?.turn
+      if (usage === undefined || turn === undefined) continue
+      steps.set(`${turn}:${event.data?.step}`, { turn, time: event.time, usage, source: event.data?.message?.source ?? {} })
+    }
+    const turns = new Map()
+    const count = (value) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 0)
+    for (const { turn, time, usage, source } of steps.values()) {
+      const held = turns.get(turn) ?? { turn, input: 0, cacheRead: 0, output: 0, amount: 0, kind: null, provider: '', model: '' }
+      const input = count(usage.inputTokens)
+      const cacheRead = count(usage.cacheReadTokens) + count(usage.cacheWriteTokens)
+      const output = count(usage.outputTokens)
+      held.input += input
+      held.cacheRead += cacheRead
+      held.output += output
+      held.provider = String(source.provider ?? held.provider)
+      held.model = String(source.model ?? held.model)
+      const billing = billingOf(held.provider, held.model, time, currency)
+      // 一轮里换过计费方式（极少见）时，以最后一步为准，金额只累计按钱计的步骤。
+      held.kind = billing.kind
+      if (billing.kind === 'credits') held.region = billing.region
+      if (billing.kind === 'money') {
+        held.currency = currency
+        held.amount += (input * billing.tier.cacheMiss + cacheRead * billing.tier.cacheHit + output * billing.tier.output) / 1e6
+      }
+      turns.set(turn, held)
+    }
+    return [...turns.values()].map((turn) => ({ ...turn, amount: turn.kind === 'money' ? Math.round(turn.amount * 1e5) / 1e5 : null }))
+  }
+
+  /** claude-style 随包的价格表（官方峰谷价 + 第三方模型目录）。 */
+  let priceTable
+  function prices() {
+    if (priceTable === undefined) {
+      try {
+        const require = createRequire(import.meta.url)
+        priceTable = JSON.parse(readFileSync(join(dirname(require.resolve('dsh-claude-style/package.json')), 'lib', 'prices.json'), 'utf8'))
+      } catch {
+        priceTable = null
+      }
+    }
+    return priceTable
+  }
+  const CATALOG_SUFFIXES = ['-high', '-low', '-fast', '-sg', '-256k', '-128k', '-1m', '-32k', '-200k', '-flex']
+  function priceTier(provider, model, time, currency) {
+    const table = prices()
+    if (table === null) return null
+    const bare = model.trim().toLowerCase().split('/').pop()
+    if (bare === '') return null
+    // 官方价格表只对 DeepSeek 官方账号有效。
+    if (/deepseek-account|^deepseek$/i.test(provider)) {
+      const id = table.models?.[bare] ? bare : table.aliases?.[bare]
+      const price = id === undefined ? undefined : table.models?.[id]?.[currency]
+      if (price === undefined) return null
+      return isPeak(time, table.schedule) ? price.peak : price.offPeak
+    }
+    const candidates = [table.aliases?.[bare], bare]
+    for (const suffix of CATALOG_SUFFIXES) if (bare.endsWith(suffix) && bare.length > suffix.length) candidates.push(bare.slice(0, -suffix.length))
+    const id = candidates.find((candidate) => candidate !== undefined && Object.hasOwn(table.catalog ?? {}, candidate))
+    if (id === undefined) return null
+    const published = currency === 'CNY' ? table.catalogCny?.[id] : undefined
+    const parts = (published ?? table.catalog[id]).split(' ').map(Number)
+    if (parts.length !== 3 || !parts.every((value) => Number.isFinite(value) && value >= 0) || (parts[0] === 0 && parts[2] === 0)) return null
+    const rate = published !== undefined ? 1 : currency === 'CNY' ? table.usdToCny ?? 7.2 : 1
+    return { cacheMiss: parts[0] * rate, cacheHit: parts[1] * rate, output: parts[2] * rate }
+  }
+  function isPeak(time, schedule) {
+    if (schedule === undefined || !Number.isFinite(time)) return false
+    const parts = (zone) => Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(new Date(time)).map((part) => [part.type, part.value]))
+    const clock = parts(schedule.timeZone)
+    const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(clock.weekday)
+    if (!schedule.peakDays.includes(weekday)) return false
+    const local = parts(schedule.holidayZone)
+    if (schedule.holidays.includes(`${local.year}-${local.month}-${local.day}`)) return false
+    const minutes = Number(clock.hour) * 60 + Number(clock.minute)
+    const toMinutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5))
+    return schedule.peakWindows.some((window) => minutes >= toMinutes(window.start) && minutes < toMinutes(window.end))
+  }
+
+  // 5. 窗口尺寸记忆补丁
   if (process.platform === 'win32' && config.windowPatch !== false) {
     // 宿主进程就是以 RunAsNode 运行的应用本体，安装目录由它推出。
     const asar = join(dirname(process.execPath), 'resources', 'app.asar')

@@ -1,6 +1,7 @@
 # dsh-miaopeng-kit 组合包 patch。
 #
-# 这一个组合包就是全部：它启用随包锁定版本的 WorkBuddy（模型）和 claude-style（外观），
+# 这一个组合包就是全部：它启用随包锁定版本的 WorkBuddy（模型）、claude-style（外观）、
+# dsh-context（上下文信息）、dshmarket（插件市场）、dsh-better-sidebar（右侧边栏），
 # 再挂上本插件。所以无论是用宿主「插件」页按 git 地址安装，还是用 install.ps1，
 # profile 里都只需要启用 dsh-miaopeng-kit 这一个组合包。
 #
@@ -42,6 +43,19 @@
         ongoingIndicator: ring
         chatReveal: off
         processRows: flat
+    # 上下文信息（右侧上下文 / 用量概览）
+    - id: dsh-context
+      name: 'dsh-context'
+      config:
+        defaultOverviewRange: today
+    # 插件市场
+    - id: dsh-market
+      name: 'dshmarket'
+    # 右侧边栏（文件、编辑器等）
+    - id: better-sidebar
+      name: 'dsh-better-sidebar'
+      config:
+        agentOpenTools: true
     - id: miaopeng-kit
       name: 'dsh-miaopeng-kit'
       config:
@@ -51,12 +65,12 @@
         # 自动给主进程打「记住窗口大小」补丁（在应用退出后进行，下次启动生效）。
         windowPatch: true
 
-# 默认界面设置（中文、紧凑的性能统计、字号）。
+# 默认界面设置（中文、每轮用量、字号）。
 - id: ui-chat
   name: "@deepseek-ai/dsh-client-ui-chat"
   config:
     transcriptView: standard
-    performanceUsage: compact
+    performanceUsage: detailed
 - id: locale
   name: "@deepseek-ai/dsh-client-locale"
   config:
