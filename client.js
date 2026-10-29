@@ -168,7 +168,6 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
 .dsh-claude-inline-stats[data-mpk-stats] [data-mpk-short]::after {
   content: attr(data-mpk-short); font-size: var(--mpk-stats-size, 12px); font-variant-numeric: tabular-nums;
 }
-.dsh-claude-inline-stats[data-mpk-stats] .dsh-claude-inline-cost[data-mpk-tone="free"]::after { font-weight: 600; }
 .dsh-claude-inline-stats[data-mpk-stats] { cursor: pointer; }
 
 .mpk-stats-pop {
@@ -185,14 +184,34 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
 .mpk-stats-pop .mpk-row[data-current] > span:first-child { color: inherit; font-weight: 600; }
 .mpk-stats-pop .mpk-note { margin-top: 4px; font-size: 11px; color: var(--dsw-alias-label-tertiary, #91888a); }
 .mpk-stats-pop .mpk-free { font-weight: 600; }
+/* 模型按钮上的「免费 / 倍率」小标签。 */
+.dsh-claude-model-btn[data-mpk-tag]::after {
+  content: attr(data-mpk-tag); margin-left: 6px; font-size: 0.86em; font-weight: 500;
+  color: var(--dsw-alias-label-tertiary, #91888a); font-variant-numeric: tabular-nums;
+}
+.dsh-claude-model-btn[data-mpk-free]::after { color: #15803d; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .dsh-claude-model-btn[data-mpk-free]::after { color: #4ade80; } }
 /* 每条回答下方的本轮用量：跟在时间后面的一行小字。 */
 .mpk-turn-usage {
   margin-left: 8px; font-size: 12px; color: var(--dsw-alias-label-tertiary, #91888a);
   font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default;
 }
+/*
+ * 侧栏会话的悬停卡片：宿主写死了深色底（#2C2C2E），浅色主题里像一块黑补丁。
+ * 改成和菜单、弹层一样的表面色，跟随浅色 / 深色主题。一两个字的提示条（如「归档会话」）保持深色，那是通行做法。
+ */
+html body [class*="_card_"]:has(> [class*="_hoverContent"]),
+html body [class*="_card_"]:has([class*="_hoverTitle"]) {
+  --dsw-hovercard-bg: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-1, #fff));
+  box-shadow: var(--dsw-elevation-panel, var(--dsw-shadow-lv3));
+}
+html body [class*="_card_"] [class*="_hoverTitle"] { color: var(--dsw-alias-label-primary, #161616); }
+html body [class*="_card_"] :is([class*="_hoverPath"], [class*="_hoverTime"]) { color: var(--dsw-alias-label-secondary, #70686a); }
+html body [class*="_card_"] [class*="_hoverStatus"] { color: var(--dsw-alias-label-tertiary, #91888a); }
 /* 上下文百分比：占用低时用中性色，升高后才交给主题的颜色梯度提醒。 */
 html body [data-dsh-claude-context-meter][data-dsh-claude-ramp-span="low"] button,
-html body [data-dsh-claude-context-meter][data-dsh-claude-ramp-span="low"] button span { color: var(--dsw-alias-label-secondary, #70686a) !important; }
+html body [data-dsh-claude-context-meter][data-dsh-claude-ramp-span="low"] button span,
+html body [data-dsh-claude-meter-ring][data-dsh-claude-ramp-span="low"] .dsh-claude-meter-ring-value { color: var(--dsw-alias-label-secondary, #70686a) !important; }
 
 /*
  * 推理等级：最高档的点阵保留，但不再循环闪烁——几百个方块同时做无限动画会让拖到 Max 时卡顿（实测 50–100ms 长任务）。
@@ -590,7 +609,8 @@ window.__ModuleLoader__.load({
           credits.set(region, { ...held, at: Date.now() })
           return fetchJson(`/workbuddy/credits?region=${region}`).then((json) => {
             const total = json?.credits?.ok ? json.credits.total : undefined
-            const next = { total: total ?? held?.total, at: Date.now() }
+            // failed：这次没读到且之前也没有数，弹层显示「暂不可用」而不是一直「读取中」。
+            const next = { total: total ?? held?.total, failed: total === undefined && held?.total === undefined, at: Date.now() }
             credits.set(region, next)
             if (total !== undefined && !anchors.has(region)) anchors.set(region, total)
             return next
@@ -636,22 +656,19 @@ window.__ModuleLoader__.load({
         }
 
         const sessionIdNow = () => document.querySelector('[data-conversation-session]')?.getAttribute('data-conversation-session') ?? null
-        /** 金额币种跟随 claude-style 的设置（它的统计栏显示 ¥ 或 $）。 */
-        const currencyNow = () => (/^\s*\$/.test(document.querySelector('.dsh-claude-inline-cost')?.textContent ?? '') ? 'USD' : 'CNY')
-
         /** 会话 → { at, latest, turns } */
         const turnCache = new Map()
         let turnsLoading = null
         function loadTurns(session, force = false) {
           const held = turnCache.get(session)
-          const currency = currencyNow()
-          if (!force && held !== undefined && held.currency === currency && Date.now() - held.at < 15000) return
+          if (!force && held !== undefined && Date.now() - held.at < 15000) return
           if (turnsLoading === session) return
           turnsLoading = session
-          fetchJson(`/dsh-miaopeng-kit/turns?session=${encodeURIComponent(session)}&currency=${currency}`).then((json) => {
+          // 币种和自定义计费表由宿主按 claude-style 的设置决定，这里只取结果。
+          fetchJson(`/dsh-miaopeng-kit/turns?session=${encodeURIComponent(session)}`).then((json) => {
             turnsLoading = null
             if (!Array.isArray(json?.turns)) return
-            turnCache.set(session, { at: Date.now(), currency, turns: json.turns })
+            turnCache.set(session, { at: Date.now(), currency: json.currency, turns: json.turns })
             scheduleUsage()
           })
         }
@@ -672,8 +689,9 @@ window.__ModuleLoader__.load({
         }
 
         function formatMoney(amount, currency) {
-          const symbol = currency === 'USD' ? '$' : '¥'
-          if (!Number.isFinite(amount)) return null
+          const symbol = currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : null
+          if (symbol === null || !Number.isFinite(amount)) return null
+          if (amount === 0) return `${symbol}0`
           return `${symbol}${amount >= 1 ? amount.toFixed(2) : amount >= 0.01 ? amount.toFixed(3) : amount.toFixed(4)}`
         }
         const formatCredits = (value) => `${Math.round(value * 100) / 100} 积分`
@@ -691,7 +709,7 @@ window.__ModuleLoader__.load({
         /** 本会话合计：按计费方式分别相加。 */
         function sessionTotals(session) {
           const data = turnCache.get(session)
-          const totals = { money: 0, currency: data?.currency ?? currencyNow(), hasMoney: false, credits: 0, hasCredits: false, unmeasured: 0, input: 0, cacheRead: 0, output: 0, turns: 0 }
+          const totals = { money: 0, currency: data?.currency ?? 'CNY', hasMoney: false, credits: 0, hasCredits: false, unmeasured: 0, input: 0, cacheRead: 0, output: 0, turns: 0 }
           for (const turn of data?.turns ?? []) {
             totals.turns += 1
             totals.input += turn.input + turn.cacheRead
@@ -724,32 +742,60 @@ window.__ModuleLoader__.load({
           const spent = totalsText(totals)
           if (spent) return spent
           const now = billingNow()
-          return now.kind === 'credits' ? (now.free ? '免费' : '0 积分') : formatMoney(0, totals.currency)
+          return now.kind === 'credits' ? (now.free ? '免费' : '0 积分') : formatMoney(0, totals.currency) ?? '—'
         }
 
         /** 当前选中模型的计费方式：{ kind: 'credits', region } | { kind: 'money' }，以及选择器里的数据。 */
         function billingNow() {
           ensureData()
           const provider = currentProvider()
-          const current = currentModel()
-          const region = regionOf(provider ?? current?.label ?? '')
-          const free = current?.entry !== undefined && rankOf(current.entry) === 0
-          return region !== null ? { kind: 'credits', region, free, entry: current?.entry } : { kind: 'money', free: false, entry: current?.entry }
+          const entry = selectedEntry() ?? currentModel()?.entry
+          const region = regionOf(provider ?? '')
+          const free = entry !== undefined && rateValue(entry.rate) === 0
+          return region !== null ? { kind: 'credits', region, free, entry } : { kind: 'money', free: false, entry }
         }
 
-        /** 底栏：本会话花费（按计费方式）＋（积分时）余额，后面是总 token。 */
-        function costLine(session) {
-          const totals = sessionTotals(session)
-          const now = billingNow()
-          const spent = totalsText(totals)
-          if (now.kind === 'credits') {
-            const balance = balanceOf(now.region)
-            return {
-              text: [now.free ? '免费' : null, spent ? `本会话 ${spent}` : null, balance === undefined ? null : `余 ${shortCount(balance)} 积分`].filter(Boolean).join(' · ') || '积分计费',
-              free: now.free,
-            }
+        /** 输入框下方模型按钮当前选中的模型，在 WorkBuddy 状态里的条目（倍率 / 状态 / 促销）；没有选择器打开也能用。 */
+        function selectedEntry() {
+          const trigger = document.querySelector('[data-slot="conversation.input.model.label"]')?.closest('[data-provider-id][data-model-id]')
+          if (!trigger) return undefined
+          const providerId = trigger.getAttribute('data-provider-id')
+          const modelId = trigger.getAttribute('data-model-id')
+          for (const provider of Object.values(snapshot?.providers ?? {})) {
+            if (provider.provider !== providerId) continue
+            const model = provider.models?.[modelId]
+            if (model === undefined) return undefined
+            return { id: modelId, rate: model.rate, verdict: model.verdict, busy: model.busy, promotion: promotions.get(providerId)?.get(modelId) }
           }
-          return { text: spent ? `本会话 ${spent}` : formatMoney(0, totals.currency), free: false }
+          return undefined
+        }
+
+        /** 模型按钮上跟一个小标签：免费 / 倍率，和选择器里的写法一致。按钱计费的模型不加。 */
+        function decorateModelTag() {
+          // 可见的是 claude-style 的模型按钮；宿主原来的按钮被它隐藏，但仍携带 provider / model id。
+          const buttons = document.querySelectorAll('.dsh-claude-model-btn')
+          if (buttons.length === 0) return
+          const entry = billingNow().entry
+          const value = rateValue(entry?.rate)
+          const text = value === null ? null : value === 0 ? '免费' : String(entry.rate).replace(/x$/i, '×')
+          for (const button of buttons) {
+            setAttr(button, 'data-mpk-tag', text)
+            setAttr(button, 'data-mpk-free', value === 0 ? '' : null)
+            setAttr(button, 'title', text === null ? null : value === 0 ? '当前模型免费，不消耗积分' : `当前模型消耗倍率 ${text}`)
+          }
+        }
+
+        /**
+         * 底栏只回答两个问题：这个会话花了多少、（积分计费时）还剩多少。
+         * 当前模型是否免费看模型选择器；明细在点开的弹层里。
+         */
+        function costLine(session) {
+          const parts = [`本会话 ${spentText(session)}`]
+          const now = billingNow()
+          // 免费模型不扣积分，余额只在会扣的时候才值得占位置；随时可以在弹层里看。
+          const balance = now.kind === 'credits' && !now.free ? balanceOf(now.region) : undefined
+          if (balance !== undefined) parts.push(`余 ${shortCount(balance)} 积分`)
+          return parts.join(' · ')
         }
 
         function decorateStats() {
@@ -771,15 +817,14 @@ window.__ModuleLoader__.load({
           }
           if (total !== null) {
             const value = numberIn(total)
-            setAttr(total, 'data-mpk-short', `共 ${shortCount(value)} tokens`)
+            setAttr(total, 'data-mpk-short', `${shortCount(value)} tokens`)
             setAttr(total.closest('.dsh-claude-inline-seg'), 'title', `本会话累计 ${value.toLocaleString('zh-CN')} tokens（输入 + 输出）`)
           }
           if (cost !== null && session !== null) {
-            const line = costLine(session)
-            setAttr(cost, 'data-mpk-short', line.text)
-            setAttr(cost, 'data-mpk-tone', line.free ? 'free' : null)
+            setAttr(cost, 'data-mpk-short', costLine(session))
           }
           if (statsPop !== null) renderStatsPop()
+          decorateModelTag()
           decorateUsage()
           decorateContextPanel()
         }
@@ -864,11 +909,11 @@ window.__ModuleLoader__.load({
             money.append(row('当前模型', now.free ? '免费' : now.entry?.rate ? `倍率 ${String(now.entry.rate).replace(/x$/i, '×')}` : '按积分计费', { free: now.free }))
             for (const id of ['cn', 'intl']) {
               const balance = balanceOf(id)
-              money.append(row(id === 'cn' ? 'WorkBuddy 国内版余额' : 'WorkBuddy 国际版余额', balance === undefined ? '读取中…' : `${balance} 积分`, { current: id === now.region }))
+              money.append(row(id === 'cn' ? 'WorkBuddy 国内版余额' : 'WorkBuddy 国际版余额', balance !== undefined ? `${balance} 积分` : credits.get(id)?.failed ? '暂不可用' : '读取中…', { current: id === now.region }))
             }
             money.append(el('div', 'mpk-note', '积分按每轮结束前后的余额差计算；同一账号在别处同时使用时会一并计入。'))
           } else {
-            money.append(el('div', 'mpk-note', '按 DeepSeek 官方峰谷价格计算；其他提供方按 claude-style 价格目录估算。'))
+            money.append(el('div', 'mpk-note', 'DeepSeek 官方按峰谷价计算，其他按价格目录估算；币种和自定义单价在 claude-style 设置的「计费币种」「自定义计费表」里改。'))
           }
           if (totals.unmeasured > 0) money.append(el('div', 'mpk-note', `${totals.unmeasured} 轮积分未计量（在开启积分计量前完成）。`))
           sections.push(money)
@@ -1074,8 +1119,8 @@ window.__ModuleLoader__.load({
           clearTimeout(labelsTimer)
           for (const node of document.querySelectorAll('.mpk-effort-scale')) node.remove()
           for (const node of document.querySelectorAll('[data-mpk-text]')) node.removeAttribute('data-mpk-text')
-          for (const node of document.querySelectorAll('[data-mpk-stats], [data-mpk-show], [data-mpk-short], [data-mpk-first]')) {
-            for (const name of ['data-mpk-stats', 'data-mpk-show', 'data-mpk-short', 'data-mpk-tone', 'data-mpk-first']) node.removeAttribute(name)
+          for (const node of document.querySelectorAll('[data-mpk-stats], [data-mpk-show], [data-mpk-short], [data-mpk-first], [data-mpk-tag]')) {
+            for (const name of ['data-mpk-stats', 'data-mpk-show', 'data-mpk-short', 'data-mpk-tone', 'data-mpk-first', 'data-mpk-tag', 'data-mpk-free']) node.removeAttribute(name)
           }
           bodyObserver.disconnect()
           popoverObserver?.disconnect()

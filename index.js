@@ -223,11 +223,31 @@ export function apply(ctx, config = {}) {
     return policies.length
   }
 
+  /**
+   * 命令结果在对话里只占一行，所以只说一句话：设成了什么、有几个模型例外。
+   * 例外 = 窗口装不下设定值、改按窗口 80% 压缩的模型。
+   */
   function describe() {
-    if (setting.mode === 'off') return '自动压缩：已关闭（只能手动 /compact）'
-    if (setting.mode === 'default') return '自动压缩：默认（窗口的 80%）'
-    if (setting.mode === 'ratio') return `自动压缩：窗口的 ${Math.round(setting.ratio * 100)}%`
-    return `自动压缩：${formatTokens(setting.tokens)}（窗口更小的模型按 80% 提前压缩）`
+    if (setting.mode === 'off') return '自动压缩已关闭，只能手动 /compact'
+    if (setting.mode === 'default') return '自动压缩：默认，窗口用到 80% 时压缩'
+    if (setting.mode === 'ratio') return `自动压缩：窗口用到 ${Math.round(setting.ratio * 100)}% 时压缩`
+    const count = exceptions().size
+    return `自动压缩：${formatTokens(setting.tokens)}${count > 0 ? `（${count} 个小窗口模型提前压缩）` : ''}`
+  }
+
+  /**
+   * 达不到设定值的模型（按名称去重）：名称 → 实际阈值文本。
+   * W − O − 64K 不为正的模型宿主无法计算阈值，标为「窗口过小」。
+   */
+  function exceptions() {
+    const result = new Map()
+    if (setting.mode !== 'tokens') return result
+    for (const model of catalog.values()) {
+      const at = effectiveThreshold(setting, model.window, model.output)
+      if (at >= setting.tokens || result.has(model.name)) continue
+      result.set(model.name, model.window - (model.output ?? 0) - DEFAULT_HEADROOM > 0 ? formatTokens(at) : '窗口过小')
+    }
+    return result
   }
 
   // 1. /autocompact 命令
@@ -243,18 +263,18 @@ export function apply(ctx, config = {}) {
             return { kind: 'error', text: '用法：/autocompact 400K（也可以 1M、250000、40%、off、default）' }
           }
           if (parsed.mode === 'status') {
-            const lines = [describe()]
-            for (const model of [...catalog.values()].slice(0, 40)) {
-              lines.push(`· ${model.providerName} / ${model.name}：窗口 ${formatTokens(model.window)} → 压缩于 ${formatTokens(effectiveThreshold(setting, model.window, model.output))}`)
-            }
-            return { kind: 'success', text: lines.join('\n') }
+            // 结果卡片只显示一行：设定值 + 例外模型各自的实际阈值。
+            const listed = [...exceptions()].map(([name, at]) => `${name} ${at}`)
+            const head = setting.mode === 'tokens' ? `自动压缩：${formatTokens(setting.tokens)}` : describe()
+            return { kind: 'success', text: listed.length > 0 ? `${head}；提前压缩：${listed.join('、')}` : head }
           }
           const previous = setting
           setting = parsed
           try {
             writeSettings(ctx, { autocompact: setting })
             const count = await syncCompaction()
-            return { kind: 'success', text: `${describe()}；已为 ${count} 个模型写入覆盖策略，立即生效。上下文环会在下一次请求后按新阈值显示。` }
+            log(`autocompact: ${count} model policies written`)
+            return { kind: 'success', text: describe() }
           } catch (error) {
             setting = previous
             writeSettings(ctx, { autocompact: setting })
@@ -350,7 +370,8 @@ export function apply(ctx, config = {}) {
             res.end(body)
           }
           if (!/^session-[\w-]+$/.test(sessionId)) return reply(400, { error: 'bad session' })
-          turnUsage(sessionId, params.get('currency') === 'USD' ? 'USD' : 'CNY').then((turns) => reply(200, { turns }), (error) => reply(500, { error: String(error?.message ?? error) }))
+          const billing = claudeStyleBilling()
+          turnUsage(sessionId, billing).then((turns) => reply(200, { currency: billing.currency, turns }), (error) => reply(500, { error: String(error?.message ?? error) }))
         },
       })
       return () => {
@@ -379,20 +400,54 @@ export function apply(ctx, config = {}) {
   }
 
   /**
+   * claude-style 设置里的「计费币种」和「自定义计费表」，从 Loader 读生效中的配置（用户改动即时可见）。
+   * 币种为 off 时不算钱；计费表每行 `模型|输入|缓存读|输出`，单位是所选币种 / 百万 token，同名以计费表为准。
+   */
+  function claudeStyleBilling() {
+    let config
+    try {
+      for (const entry of ctx.get('loader')?.entries?.() ?? []) {
+        if (entry?.options?.name === 'dsh-claude-style' && entry.options.disabled !== true) {
+          config = entry.options.config
+          break
+        }
+      }
+    } catch {}
+    const choice = config?.billingCurrency
+    const currency = choice === 'USD' || choice === 'off' ? choice : 'CNY'
+    const rate = (text) => (text === '' || !Number.isFinite(Number(text)) || Number(text) < 0 ? null : Number(text))
+    const rows = new Map()
+    for (const entry of Array.isArray(config?.billingTable) ? config.billingTable : []) {
+      if (typeof entry !== 'string') continue
+      const [model = '', input = '', cacheRead = '', output = ''] = entry.split('|').map((part) => part.trim())
+      const key = model.toLowerCase().split('/').pop()
+      if (key && !rows.has(key)) rows.set(key, { cacheMiss: rate(input), cacheHit: rate(cacheRead), output: rate(output) })
+    }
+    return { currency, rows }
+  }
+
+  /**
    * 计费方式：用户用什么付费就按什么记。
    *   - WorkBuddy（国内版 / 国际版）→ 积分；每轮的积分由前端按余额变化实测，这里只标出地区；
    *   - DeepSeek 官方账号 → 官方价格表（峰谷价），币种跟随 claude-style 的设置；
    *   - 其他提供方 → claude-style 价格目录里有的按目录价，没有就只给 token。
    * 必须先看提供方再查价：WorkBuddy 上的 deepseek-v4.1-flash 在价格表里也有官方别名。
    */
-  function billingOf(provider, model, time, currency) {
+  function billingOf(provider, model, time, { currency, rows }) {
     const region = /dsh-workbuddy\/(cn|intl)$/.exec(provider)?.[1]
     if (region !== undefined) return { kind: 'credits', region }
-    const tier = priceTier(provider, model, time, currency)
+    if (currency === 'off') return { kind: 'tokens' }
+    const base = priceTier(provider, model, time, currency)
+    const row = rows.get(model.trim().toLowerCase().split('/').pop())
+    const tier = row === undefined ? base : {
+      cacheMiss: row.cacheMiss ?? base?.cacheMiss ?? 0,
+      cacheHit: row.cacheHit ?? base?.cacheHit ?? 0,
+      output: row.output ?? base?.output ?? 0,
+    }
     return tier === null ? { kind: 'tokens' } : { kind: 'money', currency, tier }
   }
 
-  async function turnUsage(sessionId, currency) {
+  async function turnUsage(sessionId, billingSettings) {
     const events = await readSessionEvents(sessionId)
     const steps = new Map()
     for (const event of events) {
@@ -414,12 +469,12 @@ export function apply(ctx, config = {}) {
       held.output += output
       held.provider = String(source.provider ?? held.provider)
       held.model = String(source.model ?? held.model)
-      const billing = billingOf(held.provider, held.model, time, currency)
+      const billing = billingOf(held.provider, held.model, time, billingSettings)
       // 一轮里换过计费方式（极少见）时，以最后一步为准，金额只累计按钱计的步骤。
       held.kind = billing.kind
       if (billing.kind === 'credits') held.region = billing.region
       if (billing.kind === 'money') {
-        held.currency = currency
+        held.currency = billing.currency
         held.amount += (input * billing.tier.cacheMiss + cacheRead * billing.tier.cacheHit + output * billing.tier.output) / 1e6
       }
       turns.set(turn, held)
