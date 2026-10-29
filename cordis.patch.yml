@@ -24,19 +24,19 @@
         sodium: on
         banLocale: off
         homeLayout: classic
-        homeRipple: true
+        homeRipple: false
         palette: claude
         typeface: claude
         conversationWidth: "1"
         composerBottomGap: roomy
         mascot: deepy
-        mascotScope: all
+        mascotScope: home
         permissionsControl: true
         statsPosition: footer
         contextDisplay: pie
         contextNumbers: true
         statsFooterAlign: left
-        billingCurrency: off
+        billingCurrency: CNY
         searchStyle: icon
         sidebarLayout: relaxed
         ongoingIndicator: ring

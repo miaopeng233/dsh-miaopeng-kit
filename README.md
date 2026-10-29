@@ -8,10 +8,19 @@ miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了。
 |---|---|
 | `/autocompact` | 统一设置自动压缩阈值：`/autocompact 400K`、`1M`、`40%`、`off`、`default`；不带参数查看每个模型的实际阈值。窗口比阈值还小的模型按默认 80% 提前压缩。 |
 | 上下文环按阈值显示 | 环、百分比、弹层里的 `~387K / 400K` 都以压缩阈值为分母，到 100% 就是即将压缩。 |
-| 模型选择器 | 弹层加宽、名字和描述单行；每行显示 免费 / 倍率（绿=便宜，橙=贵）/ 上游促销（夜间免费、Free now…）/ 拥堵 / 不可用 / 上下文窗口；同名模型补 id；每组免费 → 促销 → 其他排序；提供方名称中文化。 |
+| 模型选择器 | 分组标题吸顶并显示模型数；每行显示 免费 / 倍率（绿=便宜，橙=贵）/ 上游促销 / 拥堵 / 不可用 / 上下文窗口；同名模型补 id；每组免费 → 促销 → 其他排序；提供方名称中文化。 |
+| 对话统计栏 | 「输入 / 输出」文字标签，大数字按万、亿缩写（悬停看精确值），缓存命中率带标签。用 WorkBuddy 模型时金额换成积分：免费标识、本次启动已用、账户余额（30 秒刷新）；人民币估算放在悬停提示里。 |
+| 中文界面 | 推理等级（低 / 高 / 最高）、权限按钮（只读 / 编辑 / 完全权限）、首页问候语。模型名、命令名等专有名词保留原文。 |
+| 斜杠命令 | `/autocompact`、`/workbuddy` 补上图标和中文标题，和内置命令一致。 |
 | 窗口尺寸记忆 | 记住主窗口大小、位置和最大化状态（主进程补丁，见下）。 |
 
-## 一键安装（任何一台电脑）
+## 安装方式一：应用内「插件」页
+
+插件 → 安装 → 填 `github:OWNER/dsh-miaopeng-kit`。外观、WorkBuddy、默认设置随之一起生效；
+窗口尺寸记忆会在第一次退出应用后自动补上，下次启动生效。
+（已经单独装过 claude-style / WorkBuddy / 其他界面插件的机器，请用方式二，它会清理重复插件。）
+
+## 安装方式二：一行命令（推荐，会清理旧插件）
 
 先安装 DeepSeek Harness 并启动一次，然后在 PowerShell 里粘贴：
 
@@ -42,12 +51,14 @@ irm https://raw.githubusercontent.com/OWNER/dsh-miaopeng-kit/main/get.ps1 | iex
 dsh-context、dsh-better-sidebar（宿主自带对应功能）、dsh-whale-widget。前端样式因此从约 1.2MB 降到约 0.8MB。
 
 版本锁死是为了上游更新不会把环境弄坏；确认新版没问题后改 `package.json` 里的版本号再安装。
-`defaults.patch.yml` 是默认界面配置，安装时只追加对方还没有的条目，不覆盖已有设置。
+`cordis.patch.yml` 是组合包 patch：启用上面两个插件并给出默认界面设置；用户自己在设置里改过的值总是优先。
 
 ## 窗口补丁
 
 宿主把主窗口写死成 1280×820，只能改 `resources\app.asar` 里的主进程。`scripts/patch-window-state.mjs`
-只替换其中的 `lib/main.js`，原文件备份为 `app.asar.miaopeng-backup`。**DeepSeek Harness 自动更新后补丁会被覆盖，重新运行一次 `install.ps1` 即可**（幂等）。
+只替换其中的 `lib/main.js`，原文件备份为 `app.asar.miaopeng-backup`。插件每次启动都会检查：没打补丁时
+起一个等待进程，应用退出后自动补上，所以**应用自动更新后不用手动处理**，下次重启后再下一次就恢复。
+不想要这个补丁：在插件配置里设 `windowPatch: false`。
 
 ```powershell
 $env:ELECTRON_RUN_AS_NODE=1; & "D:\dsh\DeepSeek Harness.exe" scripts\patch-window-state.mjs "D:\dsh\resources\app.asar" --check
@@ -56,7 +67,7 @@ $env:ELECTRON_RUN_AS_NODE=1; & "D:\dsh\DeepSeek Harness.exe" scripts\patch-windo
 ## 文件
 
 - `index.js` — 宿主端：`/autocompact`、上下文环阈值、`/dsh-miaopeng-kit/models` 路由
-- `client.js` — 前端：模型选择器
+- `client.js` — 前端：模型选择器、统计栏、中文标签、命令图标
 - `get.ps1` — 在线一键安装；`install.ps1`、`scripts/install.mjs` — 安装
 - `scripts/patch-window-state.mjs` — 窗口补丁
 - 设置保存在 `~/.dsh/dsh-miaopeng-kit/settings.json`
