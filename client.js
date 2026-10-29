@@ -221,6 +221,13 @@ html body [class*="_card_"]:has([class*="_hoverTitle"]) {
 html body [class*="_card_"] [class*="_hoverTitle"] { color: var(--dsw-alias-label-primary, #161616); }
 html body [class*="_card_"] :is([class*="_hoverPath"], [class*="_hoverTime"]) { color: var(--dsw-alias-label-secondary, #70686a); }
 html body [class*="_card_"] [class*="_hoverStatus"] { color: var(--dsw-alias-label-tertiary, #91888a); }
+/*
+ * 启动时宿主的首次引导会先盖一层「正在加载设置…」遮罩（约 0.2 秒），读到「引导已完成」才撤掉；
+ * 已完成引导的人每次启动都会看到顶部闪一行字。只隐藏这个加载中的状态，真正的引导页照常显示。
+ */
+html body [class*="_onboardingOverlay"]:has(> [class*="_onboardingStage"] > [role="status"]:only-child) {
+  visibility: hidden !important; pointer-events: none !important;
+}
 /* 上下文百分比：占用低时用中性色，升高后才交给主题的颜色梯度提醒。 */
 html body [data-dsh-claude-context-meter][data-dsh-claude-ramp-span="low"] button,
 html body [data-dsh-claude-context-meter][data-dsh-claude-ramp-span="low"] button span,

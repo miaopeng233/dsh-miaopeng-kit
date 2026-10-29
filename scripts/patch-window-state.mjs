@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /**
- * 给 DeepSeek Harness 的主进程打「记住窗口大小和位置」的补丁。
+ * 给 DeepSeek Harness 打两处插件够不到的补丁（都在 resources/app.asar 里）：
  *
- * 宿主把主窗口写死成 1280×820，也没有保存逻辑；这只能在 Electron 主进程
- * （resources/app.asar 里的 lib/main.js）里改，插件够不到。
+ *   1. 记住窗口大小和位置（lib/main.js）：宿主把主窗口写死成 1280×820，也没有保存逻辑。
+ *   2. 启动不闪黑（dsh-client-ui-theme 的 client.js）：主题运行时构造时把偏好写死成默认的
+ *      「跟随系统」，要等设置读到才换回用户选的浅色 / 深色；系统是深色而应用选浅色时，
+ *      启动末尾会整页变黑约 0.1 秒（正好赶上「正在加载设置」的遮罩）。改成和字号一样，
+ *      从页面预先写好的 data-ds-theme-source 读初始偏好。宿主修好后找不到锚点就自动跳过。
  *
- * 做法：只替换 asar 里的 lib/main.js——新内容追加到数据区末尾，改写头部里该文件的
+ * 做法：只替换这几个文件——新内容追加到数据区末尾，改写头部里该文件的
  * offset/size/integrity，其他文件（包括 app.asar.unpacked 的标记）原样保留。
  * 原文件备份为 app.asar.miaopeng-backup；用 --restore 还原。
  *
@@ -133,7 +136,6 @@ function ${MARKER}Track(window, state) {
 `
 
 function patchMain(source) {
-  if (source.includes(MARKER)) return null
   const electronImport = /^import \{[^}]*\bBrowserWindow\b[^}]*\} from "electron";$/m
   if (!electronImport.test(source)) throw new Error('找不到 electron 的 import 行，宿主版本可能已变化')
   const head = 'function createWindow(preload, show = false, primary = false) {\n\tconst window = new BrowserWindow({\n\t\twidth: 1280,\n\t\theight: 820,'
@@ -159,8 +161,41 @@ function patchMain(source) {
   return next
 }
 
-/** 只读头部和 main.js，用于快速判断是否已打补丁（不把整个 asar 读进内存）。 */
-function readMainSource(path) {
+const THEME_MARKER = '__miaopengThemeBoot'
+const THEME_ANCHOR = 'this.preference = DEFAULT_PREFERENCE;\n\t\t\t\tthis.media = '
+function patchTheme(source) {
+  return source.replace(THEME_ANCHOR, [
+    `this.preference = /* ${THEME_MARKER} */ (() => {`,
+    '\t\t\t\t\tconst boot = typeof document === "undefined" ? null : document.documentElement.getAttribute("data-ds-theme-source");',
+    '\t\t\t\t\treturn boot === "light" || boot === "dark" || boot === "system" ? boot : DEFAULT_PREFERENCE;',
+    '\t\t\t\t})();',
+    '\t\t\t\tthis.media = ',
+  ].join('\n'))
+}
+
+/**
+ * 要打的补丁。required：找不到锚点时报错（宿主版本变了，需要更新脚本）；
+ * 否则视为宿主已不需要这处修正，跳过。
+ */
+const PATCHES = [
+  { file: 'lib/main.js', marker: MARKER, required: true, applies: () => true, apply: patchMain },
+  {
+    file: 'dsh/node_modules/@deepseek-ai/dsh-client-ui-theme/lib/client.js',
+    marker: THEME_MARKER,
+    required: false,
+    applies: (source) => source.includes(THEME_ANCHOR),
+    apply: patchTheme,
+  },
+]
+
+/** 还需要打的补丁（已打过、或宿主已不需要的不算）。 */
+const pending = (read) => PATCHES.filter((patch) => {
+  const source = read(patch.file)
+  return source !== null && !source.includes(patch.marker) && (patch.required || patch.applies(source))
+})
+
+/** 只读头部和要打补丁的那几个文件，用于快速判断是否已打补丁（不把整个 asar 读进内存）。 */
+function pendingOnDisk(path) {
   const fd = openSync(path, 'r')
   try {
     const head = Buffer.alloc(16)
@@ -168,22 +203,32 @@ function readMainSource(path) {
     const headerPickleSize = head.readUInt32LE(4)
     const json = Buffer.alloc(head.readUInt32LE(12))
     readSync(fd, json, 0, json.length, 16)
-    const main = entryAt(JSON.parse(json.toString('utf8')), 'lib/main.js')
-    const content = Buffer.alloc(main.size)
-    readSync(fd, content, 0, main.size, 8 + headerPickleSize + Number(main.offset))
-    return content.toString('utf8')
+    const header = JSON.parse(json.toString('utf8'))
+    return pending((file) => {
+      let entry
+      try {
+        entry = entryAt(header, file)
+      } catch {
+        return null
+      }
+      if (entry.unpacked) return null
+      const content = Buffer.alloc(entry.size)
+      readSync(fd, content, 0, entry.size, 8 + headerPickleSize + Number(entry.offset))
+      return content.toString('utf8')
+    })
   } finally {
     closeSync(fd)
   }
 }
 
 if (flag === '--check') {
-  console.log(readMainSource(asarPath).includes(MARKER) ? '已打补丁' : '未打补丁')
+  const left = pendingOnDisk(asarPath)
+  console.log(left.length === 0 ? '已打补丁' : `未打补丁：${left.map((patch) => patch.file).join('、')}`)
   process.exit(0)
 }
 
 if (flag === '--after-exit') {
-  if (readMainSource(asarPath).includes(MARKER)) process.exit(0)
+  if (pendingOnDisk(asarPath).length === 0) process.exit(0)
   // 同一时间只留一个等待进程。
   const lock = `${asarPath}.miaopeng-waiting`
   const alive = (pid) => {
@@ -217,33 +262,51 @@ if (flag === '--after-exit') {
 }
 
 const archive = readArchive(asarPath)
-const entry = entryAt(archive.header, 'lib/main.js')
-const start = archive.dataOffset + Number(entry.offset)
-const source = archive.buffer.subarray(start, start + entry.size).toString('utf8')
+const sourceOf = (file) => {
+  let entry
+  try {
+    entry = entryAt(archive.header, file)
+  } catch {
+    return null
+  }
+  if (entry.unpacked) return null
+  const start = archive.dataOffset + Number(entry.offset)
+  return archive.buffer.subarray(start, start + entry.size).toString('utf8')
+}
 
-const patched = patchMain(source)
-if (patched === null) {
+const todo = pending(sourceOf)
+if (todo.length === 0) {
   console.log('已经打过补丁，无需重复')
   process.exit(0)
 }
 
-const content = Buffer.from(patched, 'utf8')
-const dataLength = archive.buffer.length - archive.dataOffset
-entry.offset = String(dataLength)
-entry.size = content.length
-entry.integrity = integrityOf(content)
+// 新内容依次追加到数据区末尾。
+const appended = []
+let dataLength = archive.buffer.length - archive.dataOffset
+for (const patch of todo) {
+  const content = Buffer.from(patch.apply(sourceOf(patch.file)), 'utf8')
+  const entry = entryAt(archive.header, patch.file)
+  entry.offset = String(dataLength)
+  entry.size = content.length
+  entry.integrity = integrityOf(content)
+  dataLength += content.length
+  appended.push({ file: patch.file, content })
+}
 
-const output = Buffer.concat([serializeHeader(archive.header), archive.buffer.subarray(archive.dataOffset), content])
+const output = Buffer.concat([serializeHeader(archive.header), archive.buffer.subarray(archive.dataOffset), ...appended.map((item) => item.content)])
 if (!existsSync(backupPath)) copyFileSync(asarPath, backupPath)
 const temporary = `${asarPath}.miaopeng-tmp`
 writeFileSync(temporary, output)
 
-// 写完立即自检：重新读回 main.js，必须与补丁内容一致。
+// 写完立即自检：重新读回每个改过的文件，必须与补丁内容一致。
 const verify = readArchive(temporary)
-const verifyEntry = entryAt(verify.header, 'lib/main.js')
-const verifyStart = verify.dataOffset + Number(verifyEntry.offset)
-if (!verify.buffer.subarray(verifyStart, verifyStart + verifyEntry.size).equals(content)) {
-  throw new Error('自检失败：写回的 main.js 与补丁内容不一致，原文件未改动')
+for (const { file, content } of appended) {
+  const verifyEntry = entryAt(verify.header, file)
+  const verifyStart = verify.dataOffset + Number(verifyEntry.offset)
+  if (!verify.buffer.subarray(verifyStart, verifyStart + verifyEntry.size).equals(content)) {
+    rmSync(temporary, { force: true })
+    throw new Error(`自检失败：写回的 ${file} 与补丁内容不一致，原文件未改动`)
+  }
 }
 renameSync(temporary, asarPath)
-console.log(`补丁完成。原文件备份在 ${backupPath}`)
+console.log(`补丁完成（${appended.map((item) => item.file.split('/').slice(-3).join('/')).join('、')}）。原文件备份在 ${backupPath}`)

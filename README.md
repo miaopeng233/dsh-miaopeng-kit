@@ -16,6 +16,7 @@ miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了。
 | 输入光标 | 修正 claude-style 自绘光标在首页发出第一条消息、跳到新会话后停在旧位置的问题。 |
 | 斜杠命令 | `/autocompact`、`/workbuddy` 补上图标和中文标题，和内置命令一致。 |
 | 窗口尺寸记忆 | 记住主窗口大小、位置和最大化状态（主进程补丁，见下）。 |
+| 启动不闪黑 | 系统深色、应用浅色时，启动末尾不再整页变黑、不再闪「正在加载设置…」（见下）。 |
 
 ## 安装方式一：应用内「插件」页
 
@@ -57,10 +58,15 @@ irm https://raw.githubusercontent.com/miaopeng233/dsh-miaopeng-kit/main/get.ps1 
 版本锁死是为了上游更新不会把环境弄坏；确认新版没问题后改 `package.json` 里的版本号再安装。
 `cordis.patch.yml` 是组合包 patch：启用上面两个插件并给出默认界面设置；用户自己在设置里改过的值总是优先。
 
-## 窗口补丁
+## 宿主补丁（窗口尺寸、启动不闪黑）
 
-宿主把主窗口写死成 1280×820，只能改 `resources\app.asar` 里的主进程。`scripts/patch-window-state.mjs`
-只替换其中的 `lib/main.js`，原文件备份为 `app.asar.miaopeng-backup`。插件每次启动都会检查：没打补丁时
+有两处只能改 `resources\app.asar`，`scripts/patch-window-state.mjs` 只替换这两个文件，原文件备份为 `app.asar.miaopeng-backup`：
+
+- `lib/main.js`：宿主把主窗口写死成 1280×820，补丁让它记住大小、位置和最大化状态。
+- `dsh-client-ui-theme/lib/client.js`：主题运行时启动时先按「跟随系统」渲染，系统是深色、应用选浅色时，
+  启动末尾会整页闪黑（同时顶部出现「正在加载设置…」）。补丁让它从一开始就用已保存的主题；宿主修好后自动跳过。
+
+启动时那层「正在加载设置…」遮罩（已完成引导的人每次都会闪一下）由插件样式隐藏，不需要补丁。插件每次启动都会检查：没打补丁时
 起一个等待进程，应用退出后自动补上。所以**应用自动更新后不用手动处理**：更新后第一次退出时补上，再打开就恢复。
 不想要这个补丁：在插件配置里设 `windowPatch: false`。
 
