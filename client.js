@@ -191,7 +191,8 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
   font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default;
 }
 /* 上下文百分比：占用低时用中性色，升高后才交给主题的颜色梯度提醒。 */
-html body [data-dsh-claude-context-meter][data-dsh-claude-ramp-span="low"] button { color: var(--dsw-alias-label-secondary, #70686a) !important; }
+html body [data-dsh-claude-context-meter][data-dsh-claude-ramp-span="low"] button,
+html body [data-dsh-claude-context-meter][data-dsh-claude-ramp-span="low"] button span { color: var(--dsw-alias-label-secondary, #70686a) !important; }
 
 /*
  * 推理等级：最高档的点阵保留，但不再循环闪烁——几百个方块同时做无限动画会让拖到 Max 时卡顿（实测 50–100ms 长任务）。
