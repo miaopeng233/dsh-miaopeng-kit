@@ -181,7 +181,7 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
   color: var(--dsw-alias-label-secondary, #70686a); font-weight: 500;
 }
 .dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-free]::after { color: #15803d; }
-@media (prefers-color-scheme: dark) { .dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-free]::after { color: #4ade80; } }
+body[data-ds-dark-theme] .dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-free]::after { color: #4ade80; }
 
 .mpk-stats-pop {
   position: fixed; z-index: 1000; width: 300px; box-sizing: border-box; padding: 12px 14px;
@@ -190,6 +190,12 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
   box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 9%, transparent), 0 8px 24px rgba(0,0,0,.12);
   font-variant-numeric: tabular-nums;
 }
+.mpk-stats-pop { transform-origin: var(--mpk-pop-origin, 0 100%); animation: mpk-pop-in 140ms cubic-bezier(.2, .8, .3, 1); }
+@keyframes mpk-pop-in { from { opacity: 0; transform: translateY(4px) scale(.98); } }
+/* 每条回答下方的用量出现时淡入，不突然跳出来。 */
+.mpk-turn-usage { animation: mpk-fade-in 200ms ease-out; }
+@keyframes mpk-fade-in { from { opacity: 0; } }
+body[data-dsh-claude-motion="reduced"] :is(.mpk-stats-pop, .mpk-turn-usage) { animation: none; }
 .mpk-stats-pop h4 { margin: 0 0 6px; font-family: inherit; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary, #70686a); }
 .mpk-stats-pop section + section { margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, currentColor 9%, transparent); }
 .mpk-stats-pop .mpk-row { display: flex; justify-content: space-between; gap: 12px; }
@@ -197,13 +203,25 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
 .mpk-stats-pop .mpk-row[data-current] > span:first-child { color: inherit; font-weight: 600; }
 .mpk-stats-pop .mpk-note { margin-top: 4px; font-size: 11px; color: var(--dsw-alias-label-tertiary, #91888a); }
 .mpk-stats-pop .mpk-free { font-weight: 600; }
-/* 模型按钮上的「免费 / 倍率」小标签。 */
+/*
+ * 模型按钮上的「免费 / 倍率」小标签：和选择器里同一种胶囊，居中对齐。
+ * 字号比模型名小，纯文字按中心对齐会显得浮起，做成胶囊后对齐是自然的。
+ */
 .dsh-claude-model-btn[data-mpk-tag]::after {
-  content: attr(data-mpk-tag); margin-left: 6px; font-size: 0.86em; font-weight: 500;
-  color: var(--dsw-alias-label-tertiary, #91888a); font-variant-numeric: tabular-nums;
+  content: attr(data-mpk-tag); flex: none; align-self: center; margin-left: 6px; padding: 0 5px;
+  border-radius: 4px; font-size: 11px; line-height: 16px; font-weight: 500; font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8a8f98) 13%, transparent);
+  color: var(--dsw-alias-label-secondary, #70686a);
 }
-.dsh-claude-model-btn[data-mpk-free]::after { color: #15803d; font-weight: 600; }
-@media (prefers-color-scheme: dark) { .dsh-claude-model-btn[data-mpk-free]::after { color: #4ade80; } }
+.dsh-claude-model-btn[data-mpk-free]::after { background: color-mix(in srgb, #16a34a 14%, transparent); color: #15803d; font-weight: 600; }
+body[data-ds-dark-theme] .dsh-claude-model-btn[data-mpk-free]::after { color: #4ade80; }
+/*
+ * 输入框右下：模型 · 推理等级 · 上下文环。原来「Max → 圆环」的可见空白是 24px（按钮内边距 4 + 容器间距 12
+ * + 圆环按钮内边距 8），而「免费 → Max」只有 10px，看起来一段宽一段窄。圆环按钮左内边距收到 4px、
+ * 整体左移 10px，三段间距统一为 10px；悬停底色仍完整，不压到推理等级按钮。
+ */
+html body .dsh-claude-model-seat + [data-dsh-claude-meter-ring] { margin-left: -10px !important; }
+html body .dsh-claude-model-seat + [data-dsh-claude-meter-ring] > button { padding-left: 4px !important; }
 /* 每条回答下方的本轮用量：跟在时间后面的一行小字。 */
 .mpk-turn-usage {
   margin-left: 8px; font-size: 12px; color: var(--dsw-alias-label-tertiary, #91888a);
@@ -249,9 +267,8 @@ html body .dsh-claude-effort-matrix-sq.dsh-claude-effort-matrix-sq::after { anim
 /* 英文文案换中文（只写属性，显示交给 CSS）。 */
 [data-mpk-text] { font-size: 0 !important; letter-spacing: 0 !important; }
 [data-mpk-text]::after { content: attr(data-mpk-text); font-size: var(--mpk-text-size, 12px); }
-@media (prefers-color-scheme: dark) {
-  .mpk-stats-pop { box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 8px 24px rgba(0,0,0,.4); }
-}
+/* 深色跟随应用主题（body[data-ds-dark-theme]），不看系统设置：系统深色、应用浅色的人很常见。 */
+body[data-ds-dark-theme] .mpk-stats-pop { box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 8px 24px rgba(0,0,0,.4); }
 
 .${META_CLASS} {
   display: inline-flex; align-items: center; gap: 4px; flex: none; margin-left: auto;
@@ -275,11 +292,9 @@ html body .dsh-claude-effort-matrix-sq.dsh-claude-effort-matrix-sq::after { anim
   font-family: var(--dsw-font-family-mono, ui-monospace, monospace); font-size: 10.5px;
 }
 .mpk-id { color: var(--dsw-alias-label-tertiary, #8a8f98); font-size: 10.5px; margin-left: 4px; font-weight: 400; }
-@media (prefers-color-scheme: dark) {
-  .mpk-tag[data-tone="free"] { color: #4ade80; }
-  .mpk-tag[data-tone="high"], .mpk-tag[data-tone="warn"], .mpk-busy { color: #fbbf24; }
-  .mpk-tag[data-tone="bad"], .mpk-busy[data-level="congested"] { color: #f87171; }
-}
+body[data-ds-dark-theme] .mpk-tag[data-tone="free"] { color: #4ade80; }
+body[data-ds-dark-theme] :is(.mpk-tag[data-tone="high"], .mpk-tag[data-tone="warn"], .mpk-busy) { color: #fbbf24; }
+body[data-ds-dark-theme] :is(.mpk-tag[data-tone="bad"], .mpk-busy[data-level="congested"]) { color: #f87171; }
 `
 
 /**
@@ -670,7 +685,9 @@ window.__ModuleLoader__.load({
             if (first || spent > 0) recordCredits(key, (first ? 0 : creditLog[key] ?? 0) + spent)
             scheduleUsage()
           })
-          timers.push(setTimeout(() => settle(true), 4000))
+          // 余额接口通常 1～2 秒内更新；先快读一次给出结果，之后两次把晚到的扣费补进来。
+          timers.push(setTimeout(() => settle(true), 1500))
+          timers.push(setTimeout(() => settle(false), 6000))
           timers.push(setTimeout(() => settle(false), 20000))
         }
 
@@ -678,17 +695,28 @@ window.__ModuleLoader__.load({
         /** 会话 → { at, latest, turns } */
         const turnCache = new Map()
         let turnsLoading = null
+        // 正在取的时候又要求强制刷新（回答刚结束），取完再补一次，不能丢——否则要等 15 秒缓存过期。
+        let turnsAgain = null
         function loadTurns(session, force = false) {
           const held = turnCache.get(session)
           if (!force && held !== undefined && Date.now() - held.at < 15000) return
-          if (turnsLoading === session) return
+          if (turnsLoading === session) {
+            if (force) turnsAgain = session
+            return
+          }
           turnsLoading = session
           // 币种和自定义计费表由宿主按 claude-style 的设置决定，这里只取结果。
           fetchJson(`/dsh-miaopeng-kit/turns?session=${encodeURIComponent(session)}`).then((json) => {
             turnsLoading = null
-            if (!Array.isArray(json?.turns)) return
-            turnCache.set(session, { at: Date.now(), currency: json.currency, turns: json.turns })
-            scheduleUsage()
+            if (Array.isArray(json?.turns)) {
+              turnCache.set(session, { at: Date.now(), currency: json.currency, turns: json.turns })
+              scheduleUsage()
+            }
+            if (turnsAgain !== null) {
+              const again = turnsAgain
+              turnsAgain = null
+              loadTurns(again, true)
+            }
           })
         }
 
@@ -703,6 +731,8 @@ window.__ModuleLoader__.load({
           seenTurns.set(session, Math.max(seen ?? 0, latest))
           if (seen === undefined || latest <= seen) return
           loadTurns(session, true)
+          // 用量事件偶尔比回答末尾的操作行晚一点落盘，1.5 秒后再取一次兜底。
+          timers.push(setTimeout(() => loadTurns(session, true), 1500))
           const region = regionOf(currentProvider() ?? '')
           if (region !== null) measureTurn(region, `${session}#${latest}`)
         }
@@ -848,7 +878,12 @@ window.__ModuleLoader__.load({
             loadTurns(session)
             watchTurns(session)
           }
-          if (root === null) return
+          if (root === null) {
+            // 统计栏关掉或还没渲染时，回答下方的用量和上下文弹层照样要更新。
+            decorateUsage()
+            decorateContextPanel()
+            return
+          }
           setAttr(root, 'data-mpk-stats', '')
           setAttr(root, 'title', '点击查看本会话用量')
           if (!root.style.getPropertyValue('--mpk-stats-size')) root.style.setProperty('--mpk-stats-size', getComputedStyle(root).fontSize)
@@ -893,8 +928,8 @@ window.__ModuleLoader__.load({
           usageQueued = true
           requestAnimationFrame(() => {
             usageQueued = false
-            decorateUsage()
-            decorateContextPanel()
+            // 新数据一到就刷新底栏，不等每秒一次的计时器（回答结束后底栏原来要晚 1～2 秒才更新）。
+            decorateStats()
           })
         }
         function decorateUsage() {
@@ -1125,6 +1160,9 @@ window.__ModuleLoader__.load({
           try {
             decorateLabels()
             syncCaret()
+            // 回答结束（操作行出现）在节点变化里就能看到，不必等每秒一次的计时器。
+            const session = sessionIdNow()
+            if (session !== null) watchTurns(session)
           } catch (error) {
             console.warn('[dsh-miaopeng-kit] labels failed', error)
           }
