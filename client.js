@@ -157,18 +157,31 @@ html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATT
 html body ${POPOVER_SELECTOR} ${RULE_SELECTOR} ${RULE_NAME_SELECTOR}[${GROUP_ATTR}][${GROUP_ATTR}]::after { content: attr(${GROUP_ATTR}); font-size: 12px !important; }
 
 /*
- * 底部对话统计：只留一眼要看的两项——本会话花费（WorkBuddy 换成积分）和总 token；
- * 输入 / 输出 / 缓存 / 速度 / 轮数点开看（本插件自己的弹层，从统计栏上方弹出）。
- * 文字节点归 React 所有，所以只写属性，显示交给 CSS。
+ * 底部对话统计：一排「标签 数值」——花费、Token、缓存命中、轮次；标签浅、数值深，不用分隔符靠间距分组。
+ * 速度、输入 / 输出拆分等明细点开看（本插件自己的弹层，从统计栏上方弹出）。
+ * 段落沿用 claude-style 的节点（文字归 React 所有），只写属性，显示交给 CSS：
+ * 原文字 font-size: 0 隐藏，::before 画标签，::after 画数值。
  */
+.dsh-claude-inline-stats[data-mpk-stats] { cursor: pointer; display: inline-flex !important; align-items: center; gap: 14px !important; }
 .dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg { display: none !important; }
-.dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-show] { display: inline-flex !important; align-items: baseline; }
-.dsh-claude-inline-stats[data-mpk-stats] [data-mpk-short] { font-size: 0 !important; letter-spacing: 0 !important; }
-.dsh-claude-inline-stats[data-mpk-stats] [data-mpk-short] > * { display: none !important; }
-.dsh-claude-inline-stats[data-mpk-stats] [data-mpk-short]::after {
-  content: attr(data-mpk-short); font-size: var(--mpk-stats-size, 12px); font-variant-numeric: tabular-nums;
+.dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-short] {
+  /* 段里有 0 号字的裸文字（如「轮」「步」），按基线对齐会把这一段撑高，所以居中对齐。 */
+  display: inline-flex !important; align-items: center; gap: 4px; order: var(--mpk-order, 9) !important;
+  font-size: 0 !important; letter-spacing: 0 !important; line-height: 20px !important;
+  margin: 0 !important; padding: 0 !important; border: 0 !important; height: auto !important; min-height: 0 !important;
+  background: none !important; box-shadow: none !important; transform: none !important;
 }
-.dsh-claude-inline-stats[data-mpk-stats] { cursor: pointer; }
+.dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-short] > * { display: none !important; }
+.dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-short]::before {
+  content: attr(data-mpk-label); position: static; display: inline; width: auto; height: auto; margin: 0; background: none;
+  font-size: var(--mpk-stats-size, 12px); color: var(--dsw-alias-label-tertiary, #91888a);
+}
+.dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-short]::after {
+  content: attr(data-mpk-short); font-size: var(--mpk-stats-size, 12px); font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-secondary, #70686a); font-weight: 500;
+}
+.dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-free]::after { color: #15803d; }
+@media (prefers-color-scheme: dark) { .dsh-claude-inline-stats[data-mpk-stats] > .dsh-claude-inline-seg[data-mpk-free]::after { color: #4ade80; } }
 
 .mpk-stats-pop {
   position: fixed; z-index: 1000; width: 300px; box-sizing: border-box; padding: 12px 14px;
@@ -591,7 +604,6 @@ window.__ModuleLoader__.load({
           if (value < 1e8) return `${(value / 1e4).toFixed(value < 1e6 ? 1 : 0)}万`
           return `${(value / 1e8).toFixed(2)}亿`
         }
-        const numberIn = (node) => Number((node?.textContent ?? '').replace(/[^\d.]/g, ''))
 
         // ---------- 用量与费用：用什么付费就按什么记 ----------
         //
@@ -786,6 +798,30 @@ window.__ModuleLoader__.load({
         }
 
         /**
+         * 底栏四项：花费 / Token / 缓存命中 / 轮次。没有数据的项不显示（新会话还没回答时只剩花费）。
+         * 花费：按计费方式（钱 / 积分 / 免费）；当前模型会扣积分时带上余额。
+         */
+        function footerItems(session, totals) {
+          if (session === null || totals === null) return {}
+          const items = {}
+          const cost = costLine(session)
+          const freeNow = !totals.hasMoney && !totals.hasCredits && billingNow().free
+          items.cost = { label: '花费', value: cost.replace(/^本会话 /, ''), free: freeNow, title: '本会话花费；点击查看明细' }
+          if (!totals.loaded || totals.turns === 0) return items
+          const tokens = totals.input + totals.output
+          items.tokens = {
+            label: 'Token',
+            value: shortCount(tokens),
+            title: `本会话 ${tokens.toLocaleString('zh-CN')} tokens：输入 ${totals.input.toLocaleString('zh-CN')}（其中缓存 ${totals.cacheRead.toLocaleString('zh-CN')}），输出 ${totals.output.toLocaleString('zh-CN')}`,
+          }
+          if (totals.input > 0) {
+            items.cache = { label: '缓存命中', value: `${Math.round((totals.cacheRead / totals.input) * 100)}%`, title: '输入里命中缓存的比例；越高越省钱、越快' }
+          }
+          items.turns = { label: '轮次', value: String(totals.turns), title: `本会话 ${totals.turns} 轮对话` }
+          return items
+        }
+
+        /**
          * 底栏只回答两个问题：这个会话花了多少、（积分计费时）还剩多少。
          * 当前模型是否免费看模型选择器；明细在点开的弹层里。
          */
@@ -810,18 +846,31 @@ window.__ModuleLoader__.load({
           setAttr(root, 'title', '点击查看本会话用量')
           if (!root.style.getPropertyValue('--mpk-stats-size')) root.style.setProperty('--mpk-stats-size', getComputedStyle(root).fontSize)
 
-          const cost = root.querySelector('.dsh-claude-inline-cost')
-          const total = root.querySelector('.dsh-claude-inline-total')
-          for (const seg of root.querySelectorAll(':scope > .dsh-claude-inline-seg')) {
-            setAttr(seg, 'data-mpk-show', seg.contains(cost) || seg.contains(total) ? '' : null)
+          // 借用 claude-style 的四个段落当容器；数值一律来自本插件按会话缓存的数据，切换会话时不会串到上一个会话。
+          const segs = [...root.querySelectorAll(':scope > .dsh-claude-inline-seg')]
+          const segOf = (test) => segs.find(test) ?? null
+          const slots = {
+            cost: segOf((seg) => seg.querySelector('.dsh-claude-inline-cost') !== null),
+            tokens: segOf((seg) => seg.querySelector('.dsh-claude-inline-total') !== null),
+            cache: segOf((seg) => seg.getAttribute('data-dsh-claude-ramp') === 'cache'),
+            turns: segOf((seg) => /轮|turn/i.test(seg.textContent ?? '')),
           }
-          if (total !== null) {
-            const value = numberIn(total)
-            setAttr(total, 'data-mpk-short', `${shortCount(value)} tokens`)
-            setAttr(total.closest('.dsh-claude-inline-seg'), 'title', `本会话累计 ${value.toLocaleString('zh-CN')} tokens（输入 + 输出）`)
+          const totals = session === null ? null : sessionTotals(session)
+          const items = footerItems(session, totals)
+          // 轮次按对话里看得到的轮数（含失败的轮），和 claude-style 自己的计数一致。
+          const shownTurns = Number(slots.turns?.querySelector('.dsh-claude-digit-group')?.textContent)
+          if (items.turns !== undefined && Number.isFinite(shownTurns) && shownTurns > 0) {
+            items.turns = { ...items.turns, value: String(shownTurns), title: `本会话 ${shownTurns} 轮对话` }
           }
-          if (cost !== null && session !== null) {
-            setAttr(cost, 'data-mpk-short', costLine(session))
+          let order = 0
+          for (const [key, seg] of Object.entries(slots)) {
+            if (seg === null) continue
+            const item = items[key]
+            setAttr(seg, 'data-mpk-label', item?.label ?? null)
+            setAttr(seg, 'data-mpk-short', item?.value ?? null)
+            setAttr(seg, 'data-mpk-free', item?.free ? '' : null)
+            setAttr(seg, 'title', item?.title ?? null)
+            seg.style.setProperty('--mpk-order', String(order++))
           }
           if (statsPop !== null) renderStatsPop()
           decorateModelTag()
@@ -1068,8 +1117,32 @@ window.__ModuleLoader__.load({
           labelsAt = performance.now()
           try {
             decorateLabels()
+            syncCaret()
           } catch (error) {
             console.warn('[dsh-miaopeng-kit] labels failed', error)
+          }
+        }
+
+        /*
+         * claude-style 自绘的输入光标只在选区 / 滚动 / 窗口大小变化时重算位置。从首页发出第一条消息后，
+         * 输入框整体挪到新会话页底部，这几样都没变，光标就停在旧坐标（落在占位文字中间）。
+         * 输入框换了位置时补发一次 selectionchange 让它重算；跟着过渡动画再补两次。
+         */
+        let caretKey = ''
+        const caretTimers = []
+        function syncCaret() {
+          if (document.querySelector('[data-dsh-claude-caret-layer]') === null) return
+          const field = document.activeElement?.closest?.('[contenteditable="true"]') ?? document.querySelector('[contenteditable="true"]')
+          if (!field) return
+          const box = field.getBoundingClientRect()
+          const key = `${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)}`
+          if (key === caretKey) return
+          const first = caretKey === ''
+          caretKey = key
+          if (first) return
+          for (const timer of caretTimers.splice(0)) clearTimeout(timer)
+          for (const delay of [0, 300, 700]) {
+            caretTimers.push(setTimeout(() => document.dispatchEvent(new Event('selectionchange')), delay))
           }
         }
         const labelsObserver = new MutationObserver(() => {
@@ -1087,6 +1160,7 @@ window.__ModuleLoader__.load({
           try {
             decorateStats()
             decorateEffort()
+            syncCaret()
           } catch (error) {
             console.warn('[dsh-miaopeng-kit] stats failed', error)
           }
@@ -1117,10 +1191,11 @@ window.__ModuleLoader__.load({
           document.removeEventListener('keydown', onStatsKey, true)
           labelsObserver.disconnect()
           clearTimeout(labelsTimer)
+          for (const timer of caretTimers.splice(0)) clearTimeout(timer)
           for (const node of document.querySelectorAll('.mpk-effort-scale')) node.remove()
           for (const node of document.querySelectorAll('[data-mpk-text]')) node.removeAttribute('data-mpk-text')
           for (const node of document.querySelectorAll('[data-mpk-stats], [data-mpk-show], [data-mpk-short], [data-mpk-first], [data-mpk-tag]')) {
-            for (const name of ['data-mpk-stats', 'data-mpk-show', 'data-mpk-short', 'data-mpk-tone', 'data-mpk-first', 'data-mpk-tag', 'data-mpk-free']) node.removeAttribute(name)
+            for (const name of ['data-mpk-stats', 'data-mpk-show', 'data-mpk-short', 'data-mpk-label', 'data-mpk-tone', 'data-mpk-first', 'data-mpk-tag', 'data-mpk-free']) node.removeAttribute(name)
           }
           bodyObserver.disconnect()
           popoverObserver?.disconnect()
