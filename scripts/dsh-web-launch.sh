@@ -5,8 +5,11 @@
 #   2. 用 Chrome / Edge 的应用模式开一个独立窗口（单独的浏览器配置目录，和日常浏览器互不影响）；
 #   3. 等这个窗口全部关掉，停掉 dsh 后退出。没有任何进程留下，WSL 空闲一会儿后自己休眠，内存释放。
 #
+# 「窗口关没关」看的是连到 dsh 的浏览器连接：页面开着就一直连着服务端。连续 15 秒没有连接
+# （留出刷新页面的余地）就算关了。从 WSL 启动的 chrome.exe 会把窗口交给另一个进程后马上返回，
+# 等进程退出是等不到的；看连接还和浏览器无关，用默认浏览器打开也一样能自动退出。
+#
 # dsh 已经在跑（再次双击）：只再开一个窗口；退出仍由第一次启动的那个启动器负责。
-# 没有 Chrome / Edge：退回到默认浏览器打开，dsh 留在本进程里前台运行（WSL 进程结束才退出）。
 #
 # 环境变量：DSH_WEB_PORT（默认 3080）、DSH_NO_OPEN=1（测试：不开窗口）、DSH_BROWSER=default（用默认浏览器）
 set -uo pipefail
@@ -43,20 +46,20 @@ app_browser() {
   return 1
 }
 
-# 开窗口；$2 = wait 时阻塞到窗口全部关掉。用单独的浏览器配置目录：
-# 这样窗口全关时这个浏览器进程就会退出，启动器靠它判断「用户关掉了」。
+# 开窗口（不阻塞）。单独的浏览器配置目录：不带日常浏览器的标签、扩展，窗口大小单独记忆。
 open_window() {
-  local url="$1" mode="${2:-}" browser
+  local url="$1" browser
   [[ -n "${DSH_NO_OPEN:-}" ]] && return 0
   if browser="$(app_browser)"; then
-    local args=(--user-data-dir="$LOCALAPPDATA_WIN\\DeepSeekHarnessWSL\\browser" --no-first-run --no-default-browser-check --app="$url" --window-size=1400,900)
-    if [[ "$mode" == wait ]]; then "$browser" "${args[@]}" >/dev/null 2>&1 < /dev/null
-    else setsid "$browser" "${args[@]}" >/dev/null 2>&1 < /dev/null & fi
-    return 0
+    setsid "$browser" --user-data-dir="$LOCALAPPDATA_WIN\\DeepSeekHarnessWSL\\browser" --no-first-run --no-default-browser-check \
+      --app="$url" --window-size=1400,900 >/dev/null 2>&1 < /dev/null &
+  else
+    explorer.exe "$url" >/dev/null 2>&1 || true
   fi
-  explorer.exe "$url" >/dev/null 2>&1 || true
-  return 1
 }
+
+# 当前连到 dsh 的浏览器连接数。
+clients() { ss -Htn state established "( sport = :$PORT )" 2>/dev/null | wc -l; }
 
 if listening; then
   url="$(cat "$URL_FILE" 2>/dev/null)"
@@ -93,10 +96,20 @@ fi
 printf '%s\n' "$url" > "$URL_FILE"
 chmod 600 "$URL_FILE"
 
-if [[ -n "${DSH_NO_OPEN:-}" ]]; then
-  wait "$dsh_pid"                 # 测试：没有窗口可等，dsh 跑到被杀为止
-elif open_window "$url" wait; then
-  stop_dsh                        # 应用窗口全部关掉了：退出 dsh，释放资源
-else
-  wait "$dsh_pid"                 # 没有 Chrome / Edge：没法知道窗口何时关，WSL 进程结束时退出
-fi
+open_window "$url"
+
+# 等窗口连上（最多 2 分钟），之后每 2 秒看一次，连续 15 秒没有连接就退出。
+IDLE_LIMIT="${DSH_IDLE_SECONDS:-15}"
+seen=0; idle=0; waited=0
+while kill -0 "$dsh_pid" 2>/dev/null; do
+  sleep 2
+  if (( $(clients) > 0 )); then seen=1; idle=0; continue; fi
+  if (( seen )); then
+    idle=$((idle + 2))
+    (( idle >= IDLE_LIMIT )) && break
+  else
+    waited=$((waited + 2))
+    (( waited >= 120 )) && break   # 窗口一直没连上（被拦截 / 打不开）：别让 dsh 白白挂着
+  fi
+done
+stop_dsh
