@@ -6,6 +6,7 @@
 #
 # 图标：有 Windows 版留下的 icon.png（或 DSH_ICON_PNG 指定的 PNG）就转成 .ico 用，否则用 WSL 的图标。
 set -euo pipefail
+mode="${1:-}"
 
 [[ -n "${WSL_DISTRO_NAME:-}" ]] || { echo "只能在 WSL 里运行" >&2; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,11 +23,8 @@ if [[ -z "$icon_png" ]]; then
   app_png="$(wslpath -u "$win_localappdata")/Programs/DeepSeek Harness/resources/icon.png"
   [[ -f "$app_png" ]] && icon_png="$app_png"
 fi
-if [[ -n "$icon_png" && -f "$icon_png" ]]; then
-  cp "$icon_png" "$lin_dir/icon-source.png"
-elif [[ ! -f "$lin_dir/dsh.ico" ]]; then
-  rm -f "$lin_dir/icon-source.png"
-fi
+# 已经转好的 dsh.ico 会保留下来，所以 Windows 版卸载以后重建快捷方式图标也还在。
+[[ -n "$icon_png" && -f "$icon_png" ]] && cp "$icon_png" "$lin_dir/icon-source.png"
 
 # 参数里的 ~ 由 bash 展开；路径里没有空格时也加引号，换了用户名不会出错。
 launcher_arg="${LAUNCHER/#$HOME/\~}"
@@ -58,7 +56,7 @@ if (Test-Path \$src) {
   Remove-Item \$src
 }
 \$lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'DeepSeek Harness.lnk'
-if ('$1' -eq '--remove') { Remove-Item \$lnk -ErrorAction SilentlyContinue; 'removed'; exit }
+if ('$mode' -eq '--remove') { Remove-Item \$lnk -ErrorAction SilentlyContinue; 'removed'; exit }
 \$s = (New-Object -ComObject WScript.Shell).CreateShortcut(\$lnk)
 \$s.TargetPath = Join-Path \$env:WINDIR 'System32\wsl.exe'
 \$s.Arguments = '-d $WSL_DISTRO_NAME --cd ~ -- bash -lc "$launcher_arg"'
