@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 桌面快捷方式的启动器（WSL）：dsh web 没在跑就在本窗口前台启动它，然后用 Windows 默认浏览器打开。
+# 桌面快捷方式的启动器（WSL）：dsh web 没在跑就在本窗口前台启动它，然后用 Chrome / Edge 应用模式开一个独立窗口（没有就用默认浏览器）。
 # 已经在跑就直接打开浏览器后退出。启动要 10～15 秒，窗口里会显示进度。
 #
-# 故意让 dsh 留在这个（最小化的）窗口里前台运行，而不是丢到后台：WSL 在最后一个会话结束后
+# 故意让 dsh 留在这个窗口里前台运行，而不是丢到后台：WSL 在最后一个会话结束后
 # 可能关掉整个发行版，后台进程会被悄悄杀掉。关掉这个窗口 = 退出 dsh。
 set -uo pipefail
 
@@ -10,10 +10,32 @@ PORT="${DSH_WEB_PORT:-3080}"
 STATE="${DSH_HOME:-$HOME/.dsh}"
 URL_FILE="$STATE/web-url"
 
+# 用 Chrome / Edge 的应用模式（--app）打开：独立窗口、没有标签栏和地址栏、任务栏单独一个图标，
+# 和原来的桌面版一样。两个都没有就交给默认浏览器。DSH_BROWSER=default 强制用默认浏览器。
+app_browser() {
+  [[ "${DSH_BROWSER:-}" == default ]] && return 1
+  local candidate
+  for candidate in \
+    "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe" \
+    "/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
+    "$(wslpath -u "$(powershell.exe -NoProfile -Command '$env:LOCALAPPDATA' 2>/dev/null | tr -d '\r')" 2>/dev/null)/Google/Chrome/Application/chrome.exe" \
+    "/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+    "/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe"; do
+    [[ -f "$candidate" ]] && { printf '%s\n' "$candidate"; return 0; }
+  done
+  return 1
+}
+
 open_url() {
   [[ -n "${DSH_NO_OPEN:-}" ]] && return 0   # 测试用：不弹浏览器
-  # explorer.exe 打开 URL 就是交给默认浏览器；它的退出码不可靠，忽略。
-  explorer.exe "$1" >/dev/null 2>&1 || true
+  local browser
+  if browser="$(app_browser)"; then
+    # setsid：启动器退出时不连带关掉刚打开的窗口。
+    setsid "$browser" --app="$1" --window-size=1400,900 >/dev/null 2>&1 < /dev/null &
+  else
+    # explorer.exe 打开 URL 就是交给默认浏览器；它的退出码不可靠，忽略。
+    explorer.exe "$1" >/dev/null 2>&1 || true
+  fi
 }
 
 listening() { curl -s -o /dev/null -m 2 "http://127.0.0.1:$PORT/"; }
