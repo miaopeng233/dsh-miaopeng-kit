@@ -52,10 +52,17 @@ function readSettings(ctx, fallback) {
   }
 }
 
+/** 合并写入：只改传入的字段（原来整份覆盖，/autocompact 会把 fakeIpPatch 等其他开关抹掉）。 */
 function writeSettings(ctx, settings) {
   const path = settingsPath(ctx)
+  let current = {}
+  try {
+    current = JSON.parse(readFileSync(path, 'utf8'))
+  } catch {}
   mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`)
+  const temporary = `${path}.tmp`
+  writeFileSync(temporary, `${JSON.stringify({ ...current, ...settings }, null, 2)}\n`)
+  renameSync(temporary, path)
 }
 
 /**
@@ -706,24 +713,60 @@ export function apply(ctx, config = {}) {
     return schedule.peakWindows.some((window) => minutes >= toMinutes(window.start) && minutes < toMinutes(window.end))
   }
 
-  // 5. 窗口尺寸记忆补丁
-  if (process.platform === 'win32' && config.windowPatch !== false) {
+  // 5. 主进程补丁（窗口尺寸记忆、启动不闪黑、用户开启的 fake-ip）：app.asar 运行时被占用，
+  //    所以起一个分离的等待进程，应用退出后再改，下次启动生效。已是期望状态时它立即退出。
+  function spawnAsarWaiter() {
+    if (process.platform !== 'win32') return false
     // 宿主进程就是以 RunAsNode 运行的应用本体，安装目录由它推出。
     const asar = join(dirname(process.execPath), 'resources', 'app.asar')
     const script = join(dirname(fileURLToPath(import.meta.url)), 'scripts', 'patch-window-state.mjs')
-    if (existsSync(asar) && existsSync(script)) {
-      try {
-        spawn(process.execPath, [script, asar, '--after-exit'], {
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true,
-          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ELECTRON_NO_ASAR: '1' },
-        }).unref()
-      } catch (error) {
-        warn('window patch waiter failed to start', error)
-      }
+    if (!existsSync(asar) || !existsSync(script)) return false
+    try {
+      spawn(process.execPath, [script, asar, '--after-exit'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ELECTRON_NO_ASAR: '1' },
+      }).unref()
+      return true
+    } catch (error) {
+      warn('asar patch waiter failed to start', error)
+      return false
     }
   }
+  if (config.windowPatch !== false) spawnAsarWaiter()
+
+  // 5a. /fakeip：TUN 代理（Clash / mihomo 的 fake-ip 198.18.0.0/15）下 web_fetch 全部被拒时打开。
+  //     由用户自己开关；桌面版在退出应用后改 app.asar，npm 版直接改文件，都是重启后生效。
+  ctx.inject(['commands'], (scope) => {
+    scope.effect(function* () {
+      yield scope.commands.register({
+        name: 'fakeip',
+        description: 'TUN 代理下 web_fetch 被拒时，放行 fake-ip 网段 198.18.0.0/15：/fakeip on | off | status',
+        input: { hint: 'on | off | status' },
+        handler: async (invocation) => {
+          const action = (invocation.rawInput ?? '').trim().toLowerCase() || 'status'
+          const { patchFakeIp, setFakeIpOptIn, fakeIpOptedIn } = await import('./scripts/patch-fakeip.mjs')
+          if (action === 'status') {
+            const on = fakeIpOptedIn()
+            if (process.platform === 'win32') return { kind: 'success', text: `fake-ip 放行：${on ? '已开启' : '未开启'}（桌面版在退出应用后生效）` }
+            const state = patchFakeIp({ mode: 'check' }).state
+            return { kind: 'success', text: `fake-ip 放行：${on ? '已开启' : '未开启'}；当前文件${state === 'patched' ? '已打补丁' : state === 'unpatched' ? '未打补丁' : '无法识别（宿主改了写法）'}` }
+          }
+          if (action !== 'on' && action !== 'off') return { kind: 'error', text: '用法：/fakeip on（开启）、/fakeip off（关闭）、/fakeip status' }
+          const enable = action === 'on'
+          setFakeIpOptIn(enable)
+          if (process.platform === 'win32') {
+            spawnAsarWaiter()
+            return { kind: 'success', text: `已${enable ? '开启' : '关闭'} fake-ip 放行：完全退出 DeepSeek Harness（含托盘）后自动${enable ? '打上' : '撤掉'}，下次启动生效` }
+          }
+          const result = patchFakeIp({ mode: enable ? 'apply' : 'remove' })
+          if (result.state === 'missing' || result.state === 'unknown') return { kind: 'error', text: '找不到要修改的 web_fetch 代码（宿主版本变了），补丁需要更新' }
+          return { kind: 'success', text: `已${enable ? '开启' : '关闭'} fake-ip 放行，重启 dsh 生效` }
+        },
+      })
+    }, 'dsh-miaopeng-kit: /fakeip')
+  })
 
   // 5b. fake-ip 补丁自愈（npm 版 dsh）：只在用户手动运行过 scripts/patch-fakeip.mjs
   //     之后才做；`npm i -g @deepseek-ai/dsh` 升级会冲掉补丁，这里补回，下次重启生效。

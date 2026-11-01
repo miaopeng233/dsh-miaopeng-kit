@@ -10,7 +10,8 @@
  * （fakeIpPatch: true），插件启动时发现 dsh 升级冲掉了补丁就自动补回。--remove 同时关闭自愈。
  *
  * 适用于 npm 安装的 dsh（WSL / Linux / macOS）：那里是普通 JS 文件，直接文本替换即可。
- * Windows 桌面版的同一函数在 app.asar 里，不归这个脚本管。
+ * Windows 桌面版的同一函数在 app.asar 里：由 patch-window-state.mjs 在应用退出后按同一开关打 / 撤，
+ * 在应用里用 /fakeip on|off 切换。
  *
  *   node patch-fakeip.mjs            打补丁（幂等）
  *   node patch-fakeip.mjs --check    只检查
@@ -24,9 +25,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const MODULE = join('@deepseek-ai', 'dsh-web-fetch-http', 'lib', 'index.js')
-const MARK = '/* miaopeng-fakeip */'
-const ORIGINAL = 'if (parsed instanceof ipaddr.IPv4) return parsed.range() === "unicast";'
-const PATCHED = `if (parsed instanceof ipaddr.IPv4) return parsed.range() === "unicast" || ${MARK} parsed.match(ipaddr.IPv4.parse("198.18.0.0"), 15);`
+export const MARK = '/* miaopeng-fakeip */'
+export const ORIGINAL = 'if (parsed instanceof ipaddr.IPv4) return parsed.range() === "unicast";'
+export const PATCHED = `if (parsed instanceof ipaddr.IPv4) return parsed.range() === "unicast" || ${MARK} parsed.match(ipaddr.IPv4.parse("198.18.0.0"), 15);`
 
 /** 从 dsh 包根目录往下找；npm 可能把依赖提升到上一层 node_modules。 */
 function candidatesFrom(packageRoot) {
@@ -82,9 +83,20 @@ export function patchFakeIp({ file = findWebFetchModule(), mode = 'apply' } = {}
   return { file, state: 'applied' }
 }
 
-/** 记录用户是否开启（只有手动运行过本脚本才会自愈）。 */
+const settingsFile = () => join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'dsh-miaopeng-kit', 'settings.json')
+
+/** 用户是否开启了 fake-ip 补丁（/fakeip on 或手动运行过本脚本）。 */
+export function fakeIpOptedIn() {
+  try {
+    return JSON.parse(readFileSync(settingsFile(), 'utf8')).fakeIpPatch === true
+  } catch {
+    return false
+  }
+}
+
+/** 记录用户是否开启（只有手动开启过才会自愈）。 */
 export function setFakeIpOptIn(enabled) {
-  const path = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'dsh-miaopeng-kit', 'settings.json')
+  const path = settingsFile()
   let settings = {}
   try {
     settings = JSON.parse(readFileSync(path, 'utf8'))

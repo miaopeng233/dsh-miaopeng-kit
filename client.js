@@ -349,6 +349,7 @@ const COMMAND_FACES = {
   autocompact: { label: '自动压缩', icon: 'IconGaugeOutlineRegular' },
   workbuddy: { label: 'WorkBuddy', icon: 'IconGlobeOutlineRegular' },
   'editor-zh': { label: '编辑器汉化', icon: 'IconListPenOutlineRegular' },
+  fakeip: { label: 'fake-ip 放行', icon: 'IconGlobeOutlineRegular' },
 }
 
 window.__ModuleLoader__.load({

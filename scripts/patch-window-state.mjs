@@ -25,6 +25,7 @@
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { closeSync, copyFileSync, existsSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { MARK as FAKEIP_MARK, ORIGINAL as FAKEIP_ORIGINAL, PATCHED as FAKEIP_PATCHED, fakeIpOptedIn } from './patch-fakeip.mjs'
 
 // 在 Electron 的 RunAsNode 下运行时，fs 会把 .asar 当目录透明读取；这里要按普通文件处理。
 process.noAsar = true
@@ -176,6 +177,7 @@ function patchTheme(source) {
 /**
  * 要打的补丁。required：找不到锚点时报错（宿主版本变了，需要更新脚本）；
  * 否则视为宿主已不需要这处修正，跳过。
+ * wanted()：返回 false 时，已打上的这处补丁要撤掉（用 revert 还原），用于用户可以开关的补丁。
  */
 const PATCHES = [
   { file: 'lib/main.js', marker: MARKER, required: true, applies: () => true, apply: patchMain },
@@ -186,13 +188,28 @@ const PATCHES = [
     applies: (source) => source.includes(THEME_ANCHOR),
     apply: patchTheme,
   },
+  // web_fetch 放行 TUN 代理的 fake-ip 网段 198.18.0.0/15。只在用户 /fakeip on 之后打，/fakeip off 后撤掉。
+  {
+    file: 'dsh/node_modules/@deepseek-ai/dsh-web-fetch-http/lib/index.js',
+    marker: FAKEIP_MARK,
+    required: false,
+    wanted: fakeIpOptedIn,
+    applies: (source) => source.includes(FAKEIP_ORIGINAL),
+    apply: (source) => source.replace(FAKEIP_ORIGINAL, () => FAKEIP_PATCHED),
+    revert: (source) => source.replace(FAKEIP_PATCHED, () => FAKEIP_ORIGINAL),
+  },
 ]
 
-/** 还需要打的补丁（已打过、或宿主已不需要的不算）。 */
+/** 还需要处理的补丁：要打而没打的，或用户关掉了但还打着的（已处理好、宿主已不需要的不算）。 */
 const pending = (read) => PATCHES.filter((patch) => {
   const source = read(patch.file)
-  return source !== null && !source.includes(patch.marker) && (patch.required || patch.applies(source))
+  if (source === null) return false
+  const wanted = patch.wanted?.() ?? true
+  if (!wanted) return source.includes(patch.marker) && patch.revert !== undefined
+  return !source.includes(patch.marker) && (patch.required || patch.applies(source))
 })
+/** 对一个待处理补丁：要打就打，要撤就撤。 */
+const transform = (patch, source) => ((patch.wanted?.() ?? true) ? patch.apply(source) : patch.revert(source))
 
 /** 只读头部和要打补丁的那几个文件，用于快速判断是否已打补丁（不把整个 asar 读进内存）。 */
 function pendingOnDisk(path) {
@@ -223,7 +240,7 @@ function pendingOnDisk(path) {
 
 if (flag === '--check') {
   const left = pendingOnDisk(asarPath)
-  console.log(left.length === 0 ? '已打补丁' : `未打补丁：${left.map((patch) => patch.file).join('、')}`)
+  console.log(left.length === 0 ? '已是期望状态' : `待处理：${left.map((patch) => patch.file).join('、')}`)
   process.exit(0)
 }
 
@@ -276,7 +293,7 @@ const sourceOf = (file) => {
 
 const todo = pending(sourceOf)
 if (todo.length === 0) {
-  console.log('已经打过补丁，无需重复')
+  console.log('补丁都已是期望状态，无需改动')
   process.exit(0)
 }
 
@@ -284,7 +301,7 @@ if (todo.length === 0) {
 const appended = []
 let dataLength = archive.buffer.length - archive.dataOffset
 for (const patch of todo) {
-  const content = Buffer.from(patch.apply(sourceOf(patch.file)), 'utf8')
+  const content = Buffer.from(transform(patch, sourceOf(patch.file)), 'utf8')
   const entry = entryAt(archive.header, patch.file)
   entry.offset = String(dataLength)
   entry.size = content.length

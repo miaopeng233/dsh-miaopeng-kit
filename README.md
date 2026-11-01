@@ -17,6 +17,7 @@ miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了。
 | 斜杠命令 | `/autocompact`、`/workbuddy` 补上图标和中文标题，和内置命令一致。 |
 | 窗口尺寸记忆 | 记住主窗口大小、位置和最大化状态（主进程补丁，见下）。 |
 | 启动不闪黑 | 系统深色、应用浅色时，启动末尾不再整页变黑、不再闪「正在加载设置…」（见下）。 |
+| `/fakeip` | TUN 代理（Clash / mihomo 的 fake-ip，域名都解析到 `198.18.x.x`）下宿主把所有网址当内网拒绝，web_fetch 全部失败。`/fakeip on` 只额外放行 `198.18.0.0/15`（内网、回环照旧拒绝）；桌面版在完全退出应用后自动改 app.asar、下次启动生效，应用更新冲掉后也会自动补回；`/fakeip off` 撤掉，`/fakeip status` 查看。默认关闭，只由你自己开启。 |
 | 编辑器汉化 | 把 [baoyu-design](https://github.com/JimLiu/baoyu-design) 四个插件的本地编辑器（`claude-slides` 幻灯片、`claude-design` 画布、`claude-design-system` 设计系统、`claude-dashboard` 仪表盘）完整汉化：1341 条 i18n 消息 + 1682 条纯字符串词表，覆盖按钮、菜单、右键菜单、悬停提示、属性面板、导出对话框。插件升级会覆盖补丁，因此每次启动自动检查并重打；也可用 `/editor-zh` 手动重打（见下）。 |
 
 ## 安装方式零：WSL / Linux（npm 版，推荐）
