@@ -42,7 +42,12 @@ command -v dsh >/dev/null || npm_g "@deepseek-ai/dsh@${DSH_VERSION}"
 command -v pnpm >/dev/null || npm_g "pnpm@${PNPM_VERSION}"
 
 # 运行中的 dsh 会占着 profile，先停掉
-pkill -f '/@deepseek-ai/dsh/lib/bin.js' 2>/dev/null && sleep 2 || true
+# 进程命令行是 `node /usr/local/bin/dsh web`（经 npm 的 bin 链接），按 bin 路径匹配。
+DSH_BIN="$(command -v dsh)"
+if pkill -f "^node ${DSH_BIN}( |$)|@deepseek-ai/dsh/lib/bin.js" 2>/dev/null; then
+  echo "已停止运行中的 dsh，装完请重新运行 dsh web"
+  sleep 2
+fi
 
 if [[ -n "$migrate_from" ]]; then
   node "$HERE/scripts/migrate.mjs" --from "$migrate_from" $sessions
