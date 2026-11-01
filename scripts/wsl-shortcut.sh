@@ -11,7 +11,6 @@ mode="${1:-}"
 [[ -n "${WSL_DISTRO_NAME:-}" ]] || { echo "只能在 WSL 里运行" >&2; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAUNCHER="$HERE/dsh-web-launch.sh"
-chmod +x "$LAUNCHER"
 
 win_localappdata="$(powershell.exe -NoProfile -Command '[Environment]::GetFolderPath("LocalApplicationData")' | tr -d '\r')"
 win_dir="$win_localappdata\\DeepSeekHarnessWSL"
