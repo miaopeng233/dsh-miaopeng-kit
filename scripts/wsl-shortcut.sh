@@ -60,7 +60,7 @@ if ('$mode' -eq '--remove') { Remove-Item \$lnk -ErrorAction SilentlyContinue; '
 \$s = (New-Object -ComObject WScript.Shell).CreateShortcut(\$lnk)
 \$s.TargetPath = Join-Path \$env:WINDIR 'System32\wsl.exe'
 \$s.Arguments = '-d $WSL_DISTRO_NAME --cd ~ -- bash -lc "$launcher_arg"'
-\$s.WindowStyle = 7
+\$s.WindowStyle = 1   # 正常窗口：启动要 10～15 秒，最小化会让人以为没反应
 \$s.Description = 'DeepSeek Harness（WSL）：启动 dsh web 并在浏览器打开'
 if (Test-Path \$ico) { \$s.IconLocation = "\$ico,0" }
 \$s.Save()
