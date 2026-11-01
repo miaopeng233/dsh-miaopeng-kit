@@ -105,8 +105,19 @@ function fingerprint(catalog, domMap) {
     .slice(0, 12)
 }
 
-/** 找到某个编辑器目录；插件没装就返回 null。 */
-function resolveEditorDir(editor) {
+/**
+ * 找到某个编辑器目录；插件没装就返回 null。
+ * `skillsDirs`：直接装成技能的目录（如 Claude Code 的 ~/.claude/skills），给了就只在
+ * `<dir>/<skill>/scripts/editor` 里找，不碰 dsh profile。
+ */
+function resolveEditorDir(editor, skillsDirs) {
+  if (skillsDirs !== undefined) {
+    for (const root of skillsDirs) {
+      const candidate = join(root, editor.skill, 'scripts', 'editor')
+      if (existsSync(join(candidate, 'index.html'))) return candidate
+    }
+    return null
+  }
   // profile 的 node_modules 里，插件的 skills/<skill>/scripts/editor
   const roots = []
   const profileDir = process.env.DSH_PROFILE_DIR
@@ -262,8 +273,8 @@ function stripPatch(html) {
 }
 
 /** 给单个编辑器打补丁。返回 'patched' | 'current' | 'skipped'。 */
-function patchEditor(editor, resources, version) {
-  const dir = resolveEditorDir(editor)
+function patchEditor(editor, resources, version, skillsDirs) {
+  const dir = resolveEditorDir(editor, skillsDirs)
   if (dir === null) return { state: 'skipped', reason: 'not installed' }
 
   const htmlPath = join(dir, 'index.html')
@@ -308,10 +319,11 @@ function patchEditor(editor, resources, version) {
  * @param {(message: string) => void} [options.log]  成功日志
  * @param {(message: string, error?: unknown) => void} [options.warn] 警告日志
  * @param {object} [options.config]  插件配置；`config.editorZhCn === false` 可关闭
+ * @param {string[]} [options.skillsDirs]  改为给这些技能目录里的编辑器打补丁（见 resolveEditorDir）
  * @returns {{ state: 'ok' | 'off' | 'error', version?: string, patched?: string[], current?: string[], skipped?: string[], errors?: string[] }}
  */
 export function applyEditorZhCn(options = {}) {
-  const { log = () => {}, warn = () => {}, config = {} } = options
+  const { log = () => {}, warn = () => {}, config = {}, skillsDirs } = options
   if (config.editorZhCn === false) return { state: 'off' }
 
   let resources
@@ -330,7 +342,7 @@ export function applyEditorZhCn(options = {}) {
 
   for (const editor of EDITORS) {
     try {
-      const result = patchEditor(editor, resources, version)
+      const result = patchEditor(editor, resources, version, skillsDirs)
       if (result.state === 'patched') patched.push(editor.key)
       else if (result.state === 'current') current.push(editor.key)
       else skipped.push(editor.key)
@@ -349,11 +361,11 @@ export function applyEditorZhCn(options = {}) {
 
 /** 移除全部补丁（插件卸载或想恢复英文时用）。 */
 export function removeEditorZhCn(options = {}) {
-  const { log = () => {}, warn = () => {} } = options
+  const { log = () => {}, warn = () => {}, skillsDirs } = options
   const removed = []
   for (const editor of EDITORS) {
     try {
-      const dir = resolveEditorDir(editor)
+      const dir = resolveEditorDir(editor, skillsDirs)
       if (dir === null) continue
       const htmlPath = join(dir, 'index.html')
       const html = readFileSync(htmlPath, 'utf8')

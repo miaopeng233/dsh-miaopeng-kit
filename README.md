@@ -145,6 +145,20 @@ DOM 兜底按原文替换，共 **1682 条**，并处理复合结构（`Pencil  
 
 不想要这个功能：在插件配置里设 `editorZhCn: false`。
 
+### 也给 Claude Code 装上（技能版）
+
+baoyu-design 同时是一组技能。下面这条把四个技能从 GitHub 拉最新版装进 Claude Code
+（`$CLAUDE_CONFIG_DIR/skills`，默认 `~/.claude/skills`），并打上同一份汉化：
+
+```
+node scripts/claude-skills.mjs              # 安装 / 更新（更新也是重跑它）
+node scripts/claude-skills.mjs --remove     # 卸载
+```
+
+装好后重启 Claude Code，用 `/claude-slides`、`/claude-design`、`/claude-design-system`、`/claude-dashboard`。
+Claude Code 不会在启动时自愈补丁，但技能也只在重跑这条命令时才变，汉化会跟着一起重打。
+baoyu-design 里的 `dataviz` 不装：Claude Code 已经自带同名技能。
+
 **刻意保留英文**：数据名称（token `brand`、画板名 `Main`、调色板 `Palette`）、技术标识
 （`PDF`/`PNG`/`token`/`Props`/`README`）、快捷键（`Ctrl+0`），以及仪表盘里由 Agent 生成的页面正文。
 
@@ -158,6 +172,7 @@ DOM 兜底按原文替换，共 **1682 条**，并处理复合结构（`Pencil  
 - `scripts/patch-fakeip.mjs` — web_fetch 放行 TUN fake-ip 网段（npm 版，手动开启）
 - `profile/cordis.patch.yml` — 个人偏好快照（界面、默认模型、压缩策略），新 profile 用它打底
 - `scripts/patch-window-state.mjs` — 窗口补丁
+- `scripts/claude-skills.mjs` — 把 baoyu-design 四个技能装进 Claude Code 并汉化
 - `scripts/editor-zh-cn/` — 编辑器汉化：`apply.mjs`（幂等打补丁）、`catalog-zh.json`（1341 条 i18n 目录）、`dom-map.json`（1682 条 DOM 词表）
 - 设置保存在 `~/.dsh/dsh-miaopeng-kit/settings.json`
 
