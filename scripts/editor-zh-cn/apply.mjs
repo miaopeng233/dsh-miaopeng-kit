@@ -92,11 +92,15 @@ function loadResources() {
   return { catalog, domMap }
 }
 
-/** 目录指纹：内容变了就重打，没变就跳过。 */
+/** 补丁指纹：目录或注入脚本的代码变了就重打，都没变就跳过。 */
 function fingerprint(catalog, domMap) {
   return createHash('sha256')
     .update(JSON.stringify(catalog))
     .update(JSON.stringify(domMap))
+    // 只哈希目录的话，改了注入脚本（比如 DOM 兜底层）已打过的编辑器会被当成「已是最新」，永远拿不到新代码。
+    .update(buildI18nBoot.toString())
+    .update(buildDomLayer.toString())
+    .update(PATTERNS.map(([re, fn]) => `${re}${fn}`).join('\n'))
     .digest('hex')
     .slice(0, 12)
 }
@@ -168,43 +172,66 @@ function buildDomLayer(editor, domMap, version) {
     }
     return null;
   }
+  var ATTRS = ['title', 'aria-label', 'placeholder'];
+  function translateAttrs(el) {
+    for (var i = 0; i < ATTRS.length; i++) {
+      var val = el.getAttribute(ATTRS[i]);
+      if (!val) continue;
+      var nv = translate(val);
+      if (nv !== null && nv !== val) el.setAttribute(ATTRS[i], nv);
+    }
+  }
+  // 受保护区域整棵子树跳过（FILTER_REJECT），不必对每个节点做 closest()。
+  var FILTER = { acceptNode: function (n) {
+    return n.nodeType === 1 && n.matches(PROTECTED) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+  } };
   function walk(root) {
-    if (!root) return;
+    if (!root || !root.isConnected) return;
+    if (root.nodeType === 3) {
+      var p = root.parentElement;
+      if (!p || inside(p, PROTECTED)) return;
+      var tv = translate(root.nodeValue);
+      if (tv !== null && tv !== root.nodeValue) root.nodeValue = tv;
+      return;
+    }
+    if (root.nodeType !== 1 || inside(root, PROTECTED)) return;
+    translateAttrs(root);
     var n, tw;
-    try { tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null); }
+    try { tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, FILTER); }
     catch (e) { return; }
     while ((n = tw.nextNode())) {
       if (n.nodeType === 3) {
-        var p = n.parentElement;
-        if (!p || inside(p, PROTECTED)) continue;
         var nv = translate(n.nodeValue);
-        if (nv !== null) n.nodeValue = nv;
-      } else if (n.nodeType === 1) {
-        if (inside(n, PROTECTED)) continue;
-        var attrs = ['title', 'aria-label', 'placeholder'];
-        for (var i = 0; i < attrs.length; i++) {
-          var val = n.getAttribute && n.getAttribute(attrs[i]);
-          if (!val) continue;
-          var nv2 = translate(val);
-          if (nv2 !== null) n.setAttribute(attrs[i], nv2);
-        }
-      }
+        if (nv !== null && nv !== n.nodeValue) n.nodeValue = nv;
+      } else translateAttrs(n);
     }
   }
+  // 只处理变动过的节点，而不是每次变动都把整页重扫一遍（编辑幻灯片文字时每个按键都会触发）。
+  var pending = new Set();
   var scheduled = false;
-  function schedule() {
-    if (scheduled) return;
+  function flush() {
+    scheduled = false;
+    var roots = pending;
+    pending = new Set();
+    roots.forEach(walk);
+  }
+  function onMutations(records) {
+    for (var i = 0; i < records.length; i++) {
+      var r = records[i];
+      if (r.type === 'childList') for (var j = 0; j < r.addedNodes.length; j++) pending.add(r.addedNodes[j]);
+      else pending.add(r.target);
+    }
+    if (scheduled || pending.size === 0) return;
     scheduled = true;
-    var raf = window.requestAnimationFrame || function (f) { return window.setTimeout(f, 16); };
-    raf(function () { scheduled = false; walk(document.body); });
+    (window.requestAnimationFrame || function (f) { return window.setTimeout(f, 16); })(flush);
   }
   function start() {
     if (!document.body) return;
     walk(document.body);
     try {
-      new MutationObserver(schedule).observe(document.body, {
+      new MutationObserver(onMutations).observe(document.body, {
         childList: true, subtree: true, characterData: true,
-        attributes: true, attributeFilter: ['title', 'aria-label', 'placeholder']
+        attributes: true, attributeFilter: ATTRS
       });
     } catch (e) { }
   }
@@ -254,19 +281,20 @@ function patchEditor(editor, resources, version) {
 
   // 外部 js 承载两层（slides/design/design-system 可用）；dashboard 必须内联
   if (!editor.inline) {
-    writeIfChanged(join(dir, 'zh-cn.js'), `${i18nBoot}\n\n${domLayer}\n`)
+    // 消息目录已经内联在 <head> 里（必须早于 bundle），外部文件只放 DOM 兜底层，免得每次加载把 70KB 目录再解析一遍。
+    writeIfChanged(join(dir, 'zh-cn.js'), `${domLayer}\n`)
   }
 
   let html = stripPatch(original)
   const headBlock = `${I18N_TAG}\n${i18nBoot}\n</script>`
-  html = html.includes('<head>') ? html.replace('<head>', `<head>\n${headBlock}`) : `${headBlock}\n${html}`
+  html = html.includes('<head>') ? html.replace('<head>', () => `<head>\n${headBlock}`) : `${headBlock}\n${html}`
 
   if (editor.inline) {
     const block = `${INLINE_TAG}\n${domLayer}\n</script>`
-    html = html.includes('</body>') ? html.replace('</body>', `${block}\n</body>`) : `${html}\n${block}`
+    html = html.includes('</body>') ? html.replace('</body>', () => `${block}\n</body>`) : `${html}\n${block}`
   } else {
     const ref = `${EXTERNAL_TAG}`
-    html = html.includes('</body>') ? html.replace('</body>', `${ref}\n</body>`) : `${html}\n${ref}`
+    html = html.includes('</body>') ? html.replace('</body>', () => `${ref}\n</body>`) : `${html}\n${ref}`
   }
 
   writeIfChanged(htmlPath, html)

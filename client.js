@@ -348,6 +348,7 @@ function translateGreeting(text) {
 const COMMAND_FACES = {
   autocompact: { label: '自动压缩', icon: 'IconGaugeOutlineRegular' },
   workbuddy: { label: 'WorkBuddy', icon: 'IconGlobeOutlineRegular' },
+  'editor-zh': { label: '编辑器汉化', icon: 'IconListPenOutlineRegular' },
 }
 
 window.__ModuleLoader__.load({
@@ -393,7 +394,15 @@ window.__ModuleLoader__.load({
         let models = []
         let modelsAt = 0
         let unsubscribe = null
-        const timers = []
+        /** 一次性计时器：触发后自己移出集合，卸载时统一清掉（原来是只增不减的数组，每轮多 4 个）。 */
+        const timers = new Set()
+        const later = (fn, ms) => {
+          const id = setTimeout(() => {
+            timers.delete(id)
+            fn()
+          }, ms)
+          timers.add(id)
+        }
 
         // ---------- 数据 ----------
 
@@ -686,9 +695,9 @@ window.__ModuleLoader__.load({
             scheduleUsage()
           })
           // 余额接口通常 1～2 秒内更新；先快读一次给出结果，之后两次把晚到的扣费补进来。
-          timers.push(setTimeout(() => settle(true), 1500))
-          timers.push(setTimeout(() => settle(false), 6000))
-          timers.push(setTimeout(() => settle(false), 20000))
+          later(() => settle(true), 1500)
+          later(() => settle(false), 6000)
+          later(() => settle(false), 20000)
         }
 
         const sessionIdNow = () => document.querySelector('[data-conversation-session]')?.getAttribute('data-conversation-session') ?? null
@@ -699,7 +708,9 @@ window.__ModuleLoader__.load({
         let turnsAgain = null
         function loadTurns(session, force = false) {
           const held = turnCache.get(session)
-          if (!force && held !== undefined && Date.now() - held.at < 15000) return
+          // 轮次结束时会强制刷新（watchTurns），这里只是兜底：宿主每次都要把整个会话的事件读一遍，
+          // 长会话很贵，所以兜底间隔放宽到 5 分钟（原来 15 秒）。
+          if (!force && held !== undefined && Date.now() - held.at < 300000) return
           if (turnsLoading === session) {
             if (force) turnsAgain = session
             return
@@ -732,7 +743,7 @@ window.__ModuleLoader__.load({
           if (seen === undefined || latest <= seen) return
           loadTurns(session, true)
           // 用量事件偶尔比回答末尾的操作行晚一点落盘，1.5 秒后再取一次兜底。
-          timers.push(setTimeout(() => loadTurns(session, true), 1500))
+          later(() => loadTurns(session, true), 1500)
           const region = regionOf(currentProvider() ?? '')
           if (region !== null) measureTurn(region, `${session}#${latest}`)
         }
@@ -966,8 +977,10 @@ window.__ModuleLoader__.load({
         function decorateContextPanel() {
           const session = sessionIdNow()
           if (session === null) return
-          const panel = [...document.querySelectorAll('[role="dialog"], [class*="_panel"]')].find((node) => node.textContent.includes('上下文已用'))
-          if (panel === undefined) return
+          // 上下文环的弹层是打开时才挂上的 portal：role="dialog"，aria-label 是「上下文已用」。
+          // 原来还扫 [class*="_panel"]，会匹配到整个聊天面板并在生成时每 150ms 拼一次全文。
+          const panel = document.querySelector('[role="dialog"][aria-label="上下文已用"], [role="dialog"][aria-label="of context used"]')
+          if (panel === null) return
           for (const label of panel.querySelectorAll('*')) {
             if (label.childElementCount !== 0 || label.textContent.trim() !== '费用') continue
             const value = label.nextElementSibling ?? label.parentElement?.nextElementSibling
@@ -1224,7 +1237,7 @@ window.__ModuleLoader__.load({
         const tryAdopt = (attempt) => {
           const service = ctx.get?.(STATE_SERVICE)
           if (service !== undefined && service !== null) return adopt(service)
-          if (attempt < 40) timers.push(setTimeout(() => tryAdopt(attempt + 1), 250))
+          if (attempt < 40) later(() => tryAdopt(attempt + 1), 250)
         }
         tryAdopt(0)
 

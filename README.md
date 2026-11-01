@@ -40,6 +40,10 @@ curl -fsSL https://raw.githubusercontent.com/miaopeng233/dsh-miaopeng-kit/main/g
 凭据只在本机之间复制，不会进仓库；从 `/mnt/c` 复制来的文件会自动改成 600 权限（dsh 拒绝读别人可读的凭据文件）。
 源码在 `~/.dsh/dsh-miaopeng-kit-src`，以后在那里 `./install.sh` 重装。`./install.sh --no-extras --no-prefs` 只装本插件。
 
+**桌面快捷方式**：`./install.sh --shortcut`（或单独运行 `scripts/wsl-shortcut.sh`）在 Windows 桌面建「DeepSeek Harness」，
+双击即在一个最小化窗口里启动 `dsh web` 并用默认浏览器打开；已经在跑就只打开浏览器。关掉那个窗口就退出 dsh
+（故意不放后台：WSL 没有会话时可能关掉发行版，后台进程会被悄悄杀掉）。
+
 **TUN 代理（fake-ip）下 web_fetch 全部失败？** Clash / mihomo 的 TUN 模式把域名解析到 `198.18.x.x`，
 宿主把它当内网拒绝。需要的话手动打一次补丁（只额外放行 `198.18.0.0/15`，内网、回环照旧拒绝），重启 dsh 生效：
 
@@ -149,6 +153,7 @@ DOM 兜底按原文替换，共 **1682 条**，并处理复合结构（`Pencil  
 - `client.js` — 前端：模型选择器、统计栏、中文标签、命令图标
 - `get.sh`、`install.sh` — WSL / Linux 在线安装、本地安装；`get.ps1`、`install.ps1` — Windows 桌面版
 - `scripts/install.mjs` — 安装（两个平台共用）；`scripts/migrate.mjs` — 从另一份 `.dsh` 搬凭据和设置
+- `scripts/dsh-web-launch.sh`、`scripts/wsl-shortcut.sh` — 桌面快捷方式的启动器与创建脚本（WSL）
 - `scripts/patch-fakeip.mjs` — web_fetch 放行 TUN fake-ip 网段（npm 版，手动开启）
 - `profile/cordis.patch.yml` — 个人偏好快照（界面、默认模型、压缩策略），新 profile 用它打底
 - `scripts/patch-window-state.mjs` — 窗口补丁

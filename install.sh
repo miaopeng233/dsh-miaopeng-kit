@@ -6,6 +6,7 @@
 #   ./install.sh --sessions              配合 --migrate-from，连会话历史一起搬
 #   ./install.sh --no-extras --no-prefs  只装本插件
 #   ./install.sh --uninstall             卸载本插件
+#   ./install.sh --shortcut              顺带在 Windows 桌面建「DeepSeek Harness」快捷方式（WSL）
 #
 # web_fetch 的 fake-ip 补丁（TUN 代理）不会自动打，需要的话装完单独运行：
 #   node ~/.dsh/dsh-miaopeng-kit-src/scripts/patch-fakeip.mjs
@@ -17,11 +18,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 migrate_from=""
 sessions=""
+shortcut=""
 pass=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --migrate-from) migrate_from="$2"; shift 2 ;;
     --sessions) sessions="--sessions"; shift ;;
+    --shortcut) shortcut=1; shift ;;
     *) pass+=("$1"); shift ;;
   esac
 done
@@ -53,3 +56,6 @@ if [[ -n "$migrate_from" ]]; then
   node "$HERE/scripts/migrate.mjs" --from "$migrate_from" $sessions
 fi
 node "$HERE/scripts/install.mjs" "${pass[@]}"
+if [[ -n "$shortcut" ]]; then
+  bash "$HERE/scripts/wsl-shortcut.sh"
+fi

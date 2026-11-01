@@ -109,6 +109,83 @@ function policyFor(setting, provider, model, window, output) {
   return { provider, model, thresholdRatio, retainRatio }
 }
 
+/**
+ * 让 /autocompact 作用到 agent 预设里的压缩器。
+ *
+ * dsh-base 把根层的 compaction-basic 设成 disabled，真正干活的是每个 agent 预设
+ * （standard / ptc / minimal / cordis）各自挂的一份，而且不带配置；profile patch 只能按 id
+ * 改根层条目，改不到预设内部。所以 profile patch 里的 modelPolicies 对实际压缩没有作用。
+ *
+ * 压缩器每次判断都读实例的 `this.config`，这里从预设的挂载树里拿到真正在用的
+ * BasicCompactionEngine 类，包一层 compactIfNeeded / summarize：调用前把本插件算出的策略
+ * 并进实例的配置（原始配置另存，插件卸载后自动还原）。状态挂在 globalThis 的 Symbol 上，
+ * 插件热重载后新实例接管，原型只包一次。
+ */
+const COMPACTION_MODULE = '@deepseek-ai/dsh-compaction-basic'
+const COMPACTION_STATE = Symbol.for('dsh-miaopeng-kit.compaction.state')
+const COMPACTION_WRAPPED = Symbol.for('dsh-miaopeng-kit.compaction.wrapped')
+const COMPACTION_ORIGINAL = Symbol.for('dsh-miaopeng-kit.compaction.original')
+
+const policyKey = (policy) => `${policy.provider}/${policy.model}`
+const floor6 = (value) => Math.floor(value * 1e6) / 1e6
+
+/** 原始配置 + 本插件的设置 → 新配置（冻结，与宿主 resolveConfig 的产物同形）。 */
+function mergeCompactionConfig(original, state) {
+  const overrides = state.policies
+  const keys = new Set(overrides.map(policyKey))
+  const merged = { ...original }
+  if (state.setting.mode === 'ratio') {
+    merged.thresholdRatio = state.setting.ratio
+    merged.retainRatio = floor6(state.setting.ratio * RETAIN_SHARE)
+    delete merged.retainTokens
+  }
+  merged.modelPolicies = Object.freeze([
+    ...overrides.map((policy) => Object.freeze({ ...policy })),
+    ...(original.modelPolicies ?? []).filter((policy) => !keys.has(policyKey(policy))),
+  ])
+  return Object.freeze(merged)
+}
+
+/** 每次压缩判断前调用：让实例的 config 对上当前设置；没有本插件状态时还原。 */
+function refreshEngineConfig(engine) {
+  if (!Object.hasOwn(engine, COMPACTION_ORIGINAL)) {
+    Object.defineProperty(engine, COMPACTION_ORIGINAL, { value: engine.config })
+  }
+  const original = engine[COMPACTION_ORIGINAL]
+  const state = globalThis[COMPACTION_STATE]
+  if (state === undefined) {
+    if (engine.config !== original) engine.config = original
+    return undefined
+  }
+  let merged = state.cache.get(original)
+  if (merged === undefined) {
+    merged = mergeCompactionConfig(original, state)
+    state.cache.set(original, merged)
+  }
+  if (engine.config !== merged) engine.config = merged
+  return state
+}
+
+export function wrapCompactionEngine(Engine) {
+  const proto = Engine?.prototype
+  if (typeof proto?.compactIfNeeded !== 'function' || Object.hasOwn(proto, COMPACTION_WRAPPED)) return false
+  const { compactIfNeeded, summarize } = proto
+  Object.defineProperty(proto, COMPACTION_WRAPPED, { value: true })
+  proto.compactIfNeeded = function (agent, trigger, signal) {
+    const state = refreshEngineConfig(this)
+    // off 只关「按阈值」的自动压缩；上下文真的溢出时的补救压缩保留，否则这一轮直接报错。
+    if (state?.setting.mode === 'off' && trigger === 'pressure') return Promise.resolve(null)
+    return compactIfNeeded.call(this, agent, trigger, signal)
+  }
+  if (typeof summarize === 'function') {
+    proto.summarize = function (...args) {
+      refreshEngineConfig(this)
+      return summarize.apply(this, args)
+    }
+  }
+  return true
+}
+
 export function apply(ctx, config = {}) {
   const fallback = parseSize(config.autocompact ?? '400K')
   const initial = fallback === null || fallback.mode === 'status' ? { mode: 'tokens', tokens: 400000 } : fallback
@@ -163,6 +240,59 @@ export function apply(ctx, config = {}) {
     return catalog
   }
 
+  /** 本插件实例的标记：热重载时旧实例只清理自己发布的状态。 */
+  const stateOwner = Symbol('dsh-miaopeng-kit owner')
+  /** 当前设置 + 模型目录 → 每个模型的覆盖策略。 */
+  function computePolicies() {
+    const policies = []
+    for (const model of catalog.values()) {
+      const policy = policyFor(setting, model.provider, model.id, model.window, model.output)
+      if (policy !== undefined) policies.push(policy)
+    }
+    return policies.sort((a, b) => policyKey(a).localeCompare(policyKey(b)))
+  }
+  function publishCompactionState(policies = computePolicies()) {
+    globalThis[COMPACTION_STATE] = { owner: stateOwner, setting, policies, cache: new WeakMap() }
+    return policies
+  }
+  ctx.effect(() => () => {
+    if (globalThis[COMPACTION_STATE]?.owner === stateOwner) delete globalThis[COMPACTION_STATE]
+  }, 'dsh-miaopeng-kit: compaction state')
+
+  /** 已接管的压缩器类（通常只有一个，所有预设共用同一个模块），经 /dsh-miaopeng-kit/models 暴露。 */
+  const engineClasses = new Set()
+  /** 从各 agent 预设的挂载树里找压缩器类并包装。预设可能晚于本插件挂载、也会换代，所以定时找。 */
+  function wrapPresetEngines() {
+    const generations = ctx.get('agentPresets')?.generations
+    if (typeof generations?.values !== 'function') return
+    for (const generation of generations.values()) {
+      const tree = generation?.mount?.tree
+      if (typeof tree?.entries !== 'function') continue
+      for (const entry of tree.entries()) {
+        if (entry?.options?.name !== COMPACTION_MODULE) continue
+        const Engine = entry.fiber?.runtime?.callback
+        if (wrapCompactionEngine(Engine)) log('已接管 agent 预设里的压缩器，/autocompact 对所有预设生效')
+        if (typeof Engine === 'function' && Object.hasOwn(Engine.prototype, COMPACTION_WRAPPED)) engineClasses.add(Engine)
+      }
+    }
+  }
+  {
+    let timer
+    const startedAt = Date.now()
+    const tick = () => {
+      try {
+        wrapPresetEngines()
+      } catch (error) {
+        warn('compaction engine scan failed', error)
+      }
+      // 前一分钟每 2 秒找一次（预设在启动时异步挂载），之后每 30 秒（预设换代时）。
+      timer = setTimeout(tick, Date.now() - startedAt < 60000 ? 2000 : 30000)
+      timer.unref?.()
+    }
+    tick()
+    ctx.effect(() => () => clearTimeout(timer), 'dsh-miaopeng-kit: compaction engine scan')
+  }
+
   /** 把当前设置写成 compaction-basic 的配置。 */
   async function syncCompaction() {
     lastSync = { state: 'running', at: new Date().toISOString() }
@@ -185,12 +315,9 @@ export function apply(ctx, config = {}) {
     const patchPath = ctx.get('profileContext')?.patchPath
     if (typeof patchPath !== 'string') throw new Error('找不到 profile patch（profileContext 不可用）')
     await scanModels()
-    const policies = []
-    for (const model of catalog.values()) {
-      const policy = policyFor(setting, model.provider, model.id, model.window, model.output)
-      if (policy !== undefined) policies.push(policy)
-    }
-    policies.sort((a, b) => `${a.provider}/${a.model}`.localeCompare(`${b.provider}/${b.model}`))
+    // 真正生效的是这一步：交给预设里压缩器的包装层（见 wrapCompactionEngine）。
+    // 下面写 profile patch 只是留档：根层条目是 disabled 的，宿主将来启用它时也能对上。
+    const policies = publishCompactionState()
 
     const config = []
     if (setting.mode === 'off') config.push('    auto: false')
@@ -283,6 +410,7 @@ export function apply(ctx, config = {}) {
           } catch (error) {
             setting = previous
             writeSettings(ctx, { autocompact: setting })
+            publishCompactionState()
             return { kind: 'error', text: `设置失败：${error?.message ?? error}` }
           }
         },
@@ -385,6 +513,7 @@ export function apply(ctx, config = {}) {
             const body = Buffer.from(JSON.stringify({
               setting,
               lastSync,
+              compactionEngines: engineClasses.size,
               models: [...models.values()].map((model) => ({
                 provider: model.provider,
                 providerName: model.providerName,
@@ -545,8 +674,8 @@ export function apply(ctx, config = {}) {
     if (table === null) return null
     const bare = model.trim().toLowerCase().split('/').pop()
     if (bare === '') return null
-    // 官方价格表只对 DeepSeek 官方账号有效。
-    if (/deepseek-account|^deepseek$/i.test(provider)) {
+    // 官方价格表只对 DeepSeek 官方（账号登录 deepseek-account、API key deepseek-official）有效。
+    if (/^deepseek-(?:account|official)$|^deepseek$/i.test(provider)) {
       const id = table.models?.[bare] ? bare : table.aliases?.[bare]
       const price = id === undefined ? undefined : table.models?.[id]?.[currency]
       if (price === undefined) return null
