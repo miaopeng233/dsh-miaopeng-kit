@@ -1,0 +1,186 @@
+# 个人偏好快照（从 Windows 桌面版 profile 用户层导出，2026-11-01）。
+# install 时如果 profile 的 cordis.patch.yml 还是空的，就用这份打底；已有内容不会被覆盖。
+# 不含任何凭据。
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: deepseek-account
+    model: deepseek-flash
+    reasoningEffort: high
+- id: ui-settings-account
+  name: "@deepseek-ai/dsh-client-ui-settings-account"
+  config:
+    version: 1
+    step: done
+    purpose: development
+    process: standard
+    completion: skipped
+    usage: compact
+    developerTools: false
+- id: ui-chat
+  name: "@deepseek-ai/dsh-client-ui-chat"
+  config:
+    transcriptView: detailed
+    performanceUsage: compact
+- id: ui-settings
+  name: "@deepseek-ai/dsh-client-ui-settings"
+  config:
+    enabled: true
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    preference: system
+    fontSize: 14
+    codeFontSize: 13
+    terminalFontSize: 14
+- id: compaction-basic
+  name: "@deepseek-ai/dsh-compaction-basic"
+  config:
+    modelPolicies:
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "deepseek-v4-flash"
+        thresholdRatio: 0.4
+        retainRatio: 0.08421
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "deepseek-v4-pro"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "deepseek-v4.1-flash"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "glm-5.2"
+        thresholdRatio: 0.4
+        retainRatio: 0.08547
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "glm-5.3"
+        thresholdRatio: 0.4
+        retainRatio: 0.08547
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "glm-5.3-flash"
+        thresholdRatio: 0.4
+        retainRatio: 0.092067
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "hy4-preview"
+        thresholdRatio: 0.416666
+        retainRatio: 0.089285
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "kimi-k2.8-preview"
+        thresholdRatio: 0.4
+        retainRatio: 0.08547
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "kimi-k3-1"
+        thresholdRatio: 0.4
+        retainRatio: 0.082644
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "kimi-k3.1-pro"
+        thresholdRatio: 0.4
+        retainRatio: 0.082644
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "mimo-v2.6-pro"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "minimax-m3.1-flash"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "space-bunny"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/cn"
+        model: "step-5-preview"
+        thresholdRatio: 0.4
+        retainRatio: 0.08547
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "deepseek-v4.1-flash"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "deepseek-v4.1-flash-sg"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "gemini-3.8-flash"
+        thresholdRatio: 0.4
+        retainRatio: 0.08561
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "glm-5.3"
+        thresholdRatio: 0.4
+        retainRatio: 0.084033
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "glm-5.3-flash"
+        thresholdRatio: 0.4
+        retainRatio: 0.082644
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "gpt-5.6-luna"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "gpt-6-astra"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "gpt-6-luna"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "hy4-preview"
+        thresholdRatio: 0.4
+        retainRatio: 0.08547
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "kimi-k3"
+        thresholdRatio: 0.4
+        retainRatio: 0.082644
+      - provider: "@huai_xin/dsh-workbuddy/intl"
+        model: "minimax-m3.1-flash"
+        thresholdRatio: 0.4
+        retainRatio: 0.091743
+      - provider: "deepseek-account"
+        model: "deepseek-flash"
+        thresholdRatio: 0.381469
+        retainRatio: 0.100936
+      - provider: "deepseek-account"
+        model: "deepseek-v4-pro"
+        thresholdRatio: 0.381469
+        retainRatio: 0.100936
+- id: agent-preset-registry
+  name: "@deepseek-ai/dsh-agent-preset-registry"
+  config:
+    default: standard
+    selectedDefault: cordis
+- id: ui-skin-claude-style
+  name: dsh-claude-style
+  config:
+    brand: deepseek
+    brandInk: text
+    paletteColors: claude
+    motion: full
+    composerScope: all
+    modelPicker: true
+    peakrate: true
+    quickProviders: []
+    pageZoom: "1.1"
+    sodium: on
+    banLocale: off
+    homeLayout: classic
+    homeRipple: true
+    palette: claude
+    typeface: claude
+    conversationWidth: "1"
+    composerBottomGap: roomy
+    mascot: deepy
+    mascotScope: all
+    permissionsControl: true
+    statsPosition: footer
+    contextDisplay: pie
+    contextNumbers: true
+    statsFooterAlign: left
+    billingCurrency: CNY
+    searchStyle: icon
+    sidebarLayout: relaxed
+    ongoingIndicator: ring
+    chatReveal: on
+    processRows: flat
+  disabled: false

@@ -19,12 +19,42 @@ miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了。
 | 启动不闪黑 | 系统深色、应用浅色时，启动末尾不再整页变黑、不再闪「正在加载设置…」（见下）。 |
 | 编辑器汉化 | 把 [baoyu-design](https://github.com/JimLiu/baoyu-design) 四个插件的本地编辑器（`claude-slides` 幻灯片、`claude-design` 画布、`claude-design-system` 设计系统、`claude-dashboard` 仪表盘）完整汉化：1341 条 i18n 消息 + 1682 条纯字符串词表，覆盖按钮、菜单、右键菜单、悬停提示、属性面板、导出对话框。插件升级会覆盖补丁，因此每次启动自动检查并重打；也可用 `/editor-zh` 手动重打（见下）。 |
 
+## 安装方式零：WSL / Linux（npm 版，推荐）
+
+需要 Node.js ≥ 22.19 和编译工具（`sudo apt install -y build-essential`，node-pty 要现场编译）。一行命令：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/miaopeng233/dsh-miaopeng-kit/main/get.sh | bash
+```
+
+它会装好 `@deepseek-ai/dsh` 和 pnpm（没装的话），把本插件、baoyu-design 四个编辑器插件装进 `~/.dsh/profiles/web`，
+profile 用户层还是空的就用 `profile/cordis.patch.yml` 里的个人偏好打底。之后 `dsh web` 启动，在 Windows 浏览器里打开它打印的地址。
+
+**从另一台机器 / Windows 桌面版搬家**（凭据、WorkBuddy 登录、/autocompact、用量统计、界面与模型设置）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/miaopeng233/dsh-miaopeng-kit/main/get.sh | bash -s -- --migrate-from /mnt/c/Users/<你>/.dsh
+# 加 --sessions 连会话历史一起搬（工作区路径是旧系统的）
+```
+
+凭据只在本机之间复制，不会进仓库；从 `/mnt/c` 复制来的文件会自动改成 600 权限（dsh 拒绝读别人可读的凭据文件）。
+源码在 `~/.dsh/dsh-miaopeng-kit-src`，以后在那里 `./install.sh` 重装。`./install.sh --no-extras --no-prefs` 只装本插件。
+
+**TUN 代理（fake-ip）下 web_fetch 全部失败？** Clash / mihomo 的 TUN 模式把域名解析到 `198.18.x.x`，
+宿主把它当内网拒绝。需要的话手动打一次补丁（只额外放行 `198.18.0.0/15`，内网、回环照旧拒绝），重启 dsh 生效：
+
+```bash
+node ~/.dsh/dsh-miaopeng-kit-src/scripts/patch-fakeip.mjs            # 打补丁；--check 检查，--remove 移除
+```
+
+打过一次后，`npm i -g @deepseek-ai/dsh` 升级冲掉补丁时，插件启动会自动补回（`--remove` 同时关闭自愈）。
+
 ## 安装方式一：应用内「插件」页
 
 插件 → 安装 → 填 `github:miaopeng233/dsh-miaopeng-kit`。外观、WorkBuddy、上下文洞察、插件市场、右侧边栏和默认设置随之一起生效；
 窗口尺寸记忆会在第一次退出应用后自动补上，下次启动生效。已经单独装过其中某些插件也没关系，宿主会去重。
 
-## 安装方式二：一行命令（会顺带清理被取代的旧插件）
+## 安装方式二：Windows 桌面版一行命令（会顺带清理被取代的旧插件）
 
 先安装 DeepSeek Harness 并启动一次，然后在 PowerShell 里粘贴：
 
@@ -117,7 +147,10 @@ DOM 兜底按原文替换，共 **1682 条**，并处理复合结构（`Pencil  
 
 - `index.js` — 宿主端：`/autocompact`、上下文环阈值、`/dsh-miaopeng-kit/models` 路由、`/editor-zh`
 - `client.js` — 前端：模型选择器、统计栏、中文标签、命令图标
-- `get.ps1` — 在线一键安装；`install.ps1`、`scripts/install.mjs` — 安装
+- `get.sh`、`install.sh` — WSL / Linux 在线安装、本地安装；`get.ps1`、`install.ps1` — Windows 桌面版
+- `scripts/install.mjs` — 安装（两个平台共用）；`scripts/migrate.mjs` — 从另一份 `.dsh` 搬凭据和设置
+- `scripts/patch-fakeip.mjs` — web_fetch 放行 TUN fake-ip 网段（npm 版，手动开启）
+- `profile/cordis.patch.yml` — 个人偏好快照（界面、默认模型、压缩策略），新 profile 用它打底
 - `scripts/patch-window-state.mjs` — 窗口补丁
 - `scripts/editor-zh-cn/` — 编辑器汉化：`apply.mjs`（幂等打补丁）、`catalog-zh.json`（1341 条 i18n 目录）、`dom-map.json`（1682 条 DOM 词表）
 - 设置保存在 `~/.dsh/dsh-miaopeng-kit/settings.json`

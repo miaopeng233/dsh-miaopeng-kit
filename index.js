@@ -596,6 +596,18 @@ export function apply(ctx, config = {}) {
     }
   }
 
+  // 5b. fake-ip 补丁自愈（npm 版 dsh）：只在用户手动运行过 scripts/patch-fakeip.mjs
+  //     之后才做；`npm i -g @deepseek-ai/dsh` 升级会冲掉补丁，这里补回，下次重启生效。
+  if (process.platform !== 'win32' && readSettings(ctx, {}).fakeIpPatch === true) {
+    import('./scripts/patch-fakeip.mjs')
+      .then(({ patchFakeIp }) => {
+        const result = patchFakeIp()
+        if (result.state === 'applied') warn('fake-ip 补丁被 dsh 升级冲掉，已重新打上：重启 dsh 后 web_fetch 恢复')
+        else if (result.state === 'unknown') warn('dsh 改了 isPublicIpAddress 的写法，fake-ip 补丁需要更新')
+      })
+      .catch((error) => warn('fake-ip patch check failed', error))
+  }
+
   // 启动后同步一次：新启用的模型也能拿到覆盖策略。等其他提供方挂载完成再扫描。
   const startup = setTimeout(() => {
     syncCompaction()
