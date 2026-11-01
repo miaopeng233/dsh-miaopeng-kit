@@ -12,6 +12,10 @@
  *   3. `/dsh-miaopeng-kit/models` 路由：给前端选择器提供每个模型的窗口与阈值。
  *   4. 窗口尺寸记忆：主进程补丁只能在应用退出后打（app.asar 运行时被占用），
  *      所以启动时起一个分离的等待进程，退出后打补丁，下次启动生效。
+ *   5. 编辑器汉化：给 baoyu-design 系列（claude-slides / claude-design /
+ *      claude-design-system / claude-dashboard）的本地编辑器页面注入中文
+ *      i18n 消息目录与 DOM 兜底词表。这些文件属于别人的 npm 包，插件一升级
+ *      就被覆盖，所以每次启动检查一次并自愈；`/editor-zh` 可手动重打。
  *
  * 设置保存在 ~/.dsh/dsh-miaopeng-kit/settings.json（跨重载保留，不写进插件目录）。
  */
@@ -21,6 +25,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { applyEditorZhCn, removeEditorZhCn } from './scripts/editor-zh-cn/apply.mjs'
 
 export const name = 'dsh-miaopeng-kit'
 
@@ -283,6 +288,45 @@ export function apply(ctx, config = {}) {
         },
       })
     }, 'dsh-miaopeng-kit: /autocompact')
+  })
+
+  // 1b. /editor-zh 命令：手动重打编辑器汉化（升级 baoyu 插件后可用）
+  ctx.inject(['commands'], (scope) => {
+    scope.effect(function* () {
+      yield scope.commands.register({
+        name: 'editor-zh',
+        description: '重打 baoyu 编辑器汉化补丁（幻灯片/画布/设计系统/仪表盘）',
+        input: { hint: 'apply | remove | status' },
+        handler: async (invocation) => {
+          const action = (invocation.rawInput ?? '').trim().toLowerCase() || 'apply'
+          if (action === 'remove') {
+            const result = removeEditorZhCn({ log, warn })
+            return { kind: 'success', text: result.removed.length > 0 ? `已移除汉化：${result.removed.join('、')}` : '没有可移除的汉化补丁' }
+          }
+          if (action !== 'apply' && action !== 'status') {
+            return { kind: 'error', text: '用法：/editor-zh apply（重打）、/editor-zh remove（移除）、/editor-zh status' }
+          }
+          const result = applyEditorZhCn({ log, warn, config: { editorZhCn: true } })
+          if (result.state === 'error') {
+            return { kind: 'error', text: `汉化失败：${result.errors?.join('；') ?? '未知错误'}` }
+          }
+          if (action === 'status') {
+            const parts = []
+            if (result.patched.length > 0) parts.push(`待打：${result.patched.join('、')}`)
+            if (result.current.length > 0) parts.push(`已是最新：${result.current.join('、')}`)
+            if (result.skipped.length > 0) parts.push(`未安装：${result.skipped.join('、')}`)
+            return { kind: 'success', text: `汉化目录 v${result.version}；${parts.join('；') || '无编辑器'}` }
+          }
+          if (result.patched.length === 0 && result.current.length > 0) {
+            return { kind: 'success', text: `汉化已是最新（v${result.version}）：${result.current.join('、')}` }
+          }
+          return {
+            kind: 'success',
+            text: `已汉化 ${result.patched.join('、')}（v${result.version}）${result.skipped.length > 0 ? `；未安装：${result.skipped.join('、')}` : ''}。刷新编辑器页面即可看到中文。`,
+          }
+        },
+      })
+    }, 'dsh-miaopeng-kit: /editor-zh')
   })
 
   // 2. 上下文环按阈值显示
@@ -560,4 +604,18 @@ export function apply(ctx, config = {}) {
   }, 8000)
   startup.unref?.()
   ctx.effect(() => () => clearTimeout(startup), 'dsh-miaopeng-kit: startup sync')
+
+  // 6. 编辑器汉化自愈：baoyu 系列插件升级会覆盖补丁，每次启动检查一次。
+  //    放在 compaction 同步之后，避免启动瞬间的 IO 竞争。
+  if (config.editorZhCn !== false) {
+    const zhStartup = setTimeout(() => {
+      try {
+        applyEditorZhCn({ log, warn, config })
+      } catch (error) {
+        warn('editor-zh-cn startup failed', error)
+      }
+    }, 3000)
+    zhStartup.unref?.()
+    ctx.effect(() => () => clearTimeout(zhStartup), 'dsh-miaopeng-kit: editor-zh-cn startup')
+  }
 }

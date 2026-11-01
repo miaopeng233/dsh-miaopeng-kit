@@ -17,6 +17,7 @@ miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了。
 | 斜杠命令 | `/autocompact`、`/workbuddy` 补上图标和中文标题，和内置命令一致。 |
 | 窗口尺寸记忆 | 记住主窗口大小、位置和最大化状态（主进程补丁，见下）。 |
 | 启动不闪黑 | 系统深色、应用浅色时，启动末尾不再整页变黑、不再闪「正在加载设置…」（见下）。 |
+| 编辑器汉化 | 把 [baoyu-design](https://github.com/JimLiu/baoyu-design) 四个插件的本地编辑器（`claude-slides` 幻灯片、`claude-design` 画布、`claude-design-system` 设计系统、`claude-dashboard` 仪表盘）完整汉化：1341 条 i18n 消息 + 1682 条纯字符串词表，覆盖按钮、菜单、右键菜单、悬停提示、属性面板、导出对话框。插件升级会覆盖补丁，因此每次启动自动检查并重打；也可用 `/editor-zh` 手动重打（见下）。 |
 
 ## 安装方式一：应用内「插件」页
 
@@ -74,12 +75,51 @@ irm https://raw.githubusercontent.com/miaopeng233/dsh-miaopeng-kit/main/get.ps1 
 $env:ELECTRON_RUN_AS_NODE=1; & "D:\dsh\DeepSeek Harness.exe" scripts\patch-window-state.mjs "D:\dsh\resources\app.asar" --check
 ```
 
+## 编辑器汉化
+
+把 [baoyu-design](https://github.com/JimLiu/baoyu-design) 四个插件的本地编辑器完整汉化：
+
+| 插件 | 编辑器 |
+|---|---|
+| `dsh-claude-slides` | 幻灯片编辑器 |
+| `dsh-claude-design` | 画布设计编辑器 |
+| `dsh-claude-design-system` | 设计系统编辑器 |
+| `dsh-claude-dashboard` | 数据仪表盘编辑器 |
+
+**做法**：这些编辑器内置 `formatMessage({ id, defaultMessage })` 运行时，模块初始化时读取
+`globalThis.__appifact_i18n = { lang, settled }`。补丁把 **1341 条 `id → 中文`** 目录注入进去
+（在 bundle 之前执行），React 渲染出来直接是中文，不依赖 DOM 后处理；ICU 复数/选择结构按中文
+习惯简化，占位符 `{name}` `{count}` 原样保留。
+
+少数 UI 文案是**纯字符串字面量**（没有 message id，如 `label:"Image or video"`），由第二层
+DOM 兜底按原文替换，共 **1682 条**，并处理复合结构（`Pencil  P` 双空格快捷键、`Shortcut: X`、
+`Sources：…` 冒号前缀、`Page 1, pages`、`Collapse X` 等）。
+
+**安全边界**：不触碰幻灯片正文（`<section>`）、可编辑区（`[contenteditable]`）、演讲者备注、
+画板内容（`x-dc`）、图表媒体（`svg/img/canvas/video/x-embed/iframe`）、仪表盘用户页面（`#dash-root`）。
+
+**自愈**：这些文件属于别人发布的 npm 包，插件一升级 `node_modules` 就被重写，补丁必然消失。
+所以每次启动检查一次，缺失或版本不符就重新写入（内容没变则不写文件，不触发 HMR）。
+也可以手动操作：
+
+```
+/editor-zh          重打补丁
+/editor-zh status   查看哪些已打、哪些已是最新、哪些未安装
+/editor-zh remove   移除补丁，恢复英文
+```
+
+不想要这个功能：在插件配置里设 `editorZhCn: false`。
+
+**刻意保留英文**：数据名称（token `brand`、画板名 `Main`、调色板 `Palette`）、技术标识
+（`PDF`/`PNG`/`token`/`Props`/`README`）、快捷键（`Ctrl+0`），以及仪表盘里由 Agent 生成的页面正文。
+
 ## 文件
 
-- `index.js` — 宿主端：`/autocompact`、上下文环阈值、`/dsh-miaopeng-kit/models` 路由
+- `index.js` — 宿主端：`/autocompact`、上下文环阈值、`/dsh-miaopeng-kit/models` 路由、`/editor-zh`
 - `client.js` — 前端：模型选择器、统计栏、中文标签、命令图标
 - `get.ps1` — 在线一键安装；`install.ps1`、`scripts/install.mjs` — 安装
 - `scripts/patch-window-state.mjs` — 窗口补丁
+- `scripts/editor-zh-cn/` — 编辑器汉化：`apply.mjs`（幂等打补丁）、`catalog-zh.json`（1341 条 i18n 目录）、`dom-map.json`（1682 条 DOM 词表）
 - 设置保存在 `~/.dsh/dsh-miaopeng-kit/settings.json`
 
 ## 排查

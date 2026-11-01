@@ -3,7 +3,7 @@
   "version": "1.3.2",
   "private": true,
   "type": "module",
-  "description": "miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了——外观、WorkBuddy、上下文洞察、插件市场、右侧边栏、/autocompact、按计费方式的用量与费用、模型选择器改版、窗口尺寸记忆",
+  "description": "miaopeng 的 DeepSeek Harness 整合插件：装这一个就够了——外观、WorkBuddy、上下文洞察、插件市场、右侧边栏、/autocompact、按计费方式的用量与费用、模型选择器改版、窗口尺寸记忆、编辑器汉化",
   "author": "miaopeng",
   "license": "MIT",
   "exports": {
