@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/miaopeng233/dsh-miaopeng-kit/main/g
 源码在 `~/.dsh/dsh-miaopeng-kit-src`，以后在那里 `./install.sh` 重装。`./install.sh --no-extras --no-prefs` 只装本插件。
 
 **桌面快捷方式**：`./install.sh --shortcut`（或单独运行 `scripts/wsl-shortcut.sh`）在 Windows 桌面建「DeepSeek Harness」，
-双击即在一个窗口里启动 `dsh web`，并用 Chrome / Edge 的应用模式打开成独立窗口（和原来的桌面版一样没有标签栏、地址栏；`DSH_BROWSER=default` 改用默认浏览器）；已经在跑就只打开浏览器。关掉那个窗口就退出 dsh
+双击后不弹控制台，在后台启动 `dsh web`，用 Chrome / Edge 的应用模式开一个独立窗口（单独的浏览器配置，没有标签栏、地址栏）。**关掉窗口即退出 dsh**，WSL 空闲后自行休眠，不常驻占资源；再次双击只多开一个窗口。启动失败会弹提示框，日志在 `~/.dsh/logs/web-launch.log`。没有 Chrome / Edge 时退回默认浏览器
 （故意不放后台：WSL 没有会话时可能关掉发行版，后台进程会被悄悄杀掉）。
 
 **TUN 代理（fake-ip）下 web_fetch 全部失败？** Clash / mihomo 的 TUN 模式把域名解析到 `198.18.x.x`，

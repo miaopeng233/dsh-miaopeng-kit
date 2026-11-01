@@ -57,10 +57,11 @@ if (Test-Path \$src) {
 \$lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'DeepSeek Harness.lnk'
 if ('$mode' -eq '--remove') { Remove-Item \$lnk -ErrorAction SilentlyContinue; 'removed'; exit }
 \$s = (New-Object -ComObject WScript.Shell).CreateShortcut(\$lnk)
-\$s.TargetPath = Join-Path \$env:WINDIR 'System32\wsl.exe'
-\$s.Arguments = '-d $WSL_DISTRO_NAME --cd ~ -- bash -lc "$launcher_arg"'
-\$s.WindowStyle = 1   # 正常窗口：启动要 10～15 秒，最小化会让人以为没反应
-\$s.Description = 'DeepSeek Harness（WSL）：启动 dsh web 并在浏览器打开'
+# conhost --headless：在不可见的控制台里跑 wsl.exe，双击后不会弹出黑窗口。
+\$s.TargetPath = Join-Path \$env:WINDIR 'System32\conhost.exe'
+\$s.Arguments = '--headless "' + (Join-Path \$env:WINDIR 'System32\wsl.exe') + '" -d $WSL_DISTRO_NAME --cd ~ -- bash -lc "$launcher_arg"'
+\$s.WindowStyle = 7
+\$s.Description = 'DeepSeek Harness（WSL）：打开窗口即启动，关掉窗口即退出'
 if (Test-Path \$ico) { \$s.IconLocation = "\$ico,0" }
 \$s.Save()
 \$lnk
