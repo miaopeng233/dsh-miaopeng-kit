@@ -28,7 +28,10 @@ if ($Uninstall) { $arguments += "--uninstall" }
 
 # 应用本身就是 Electron，开 RunAsNode 即可当 Node 用，新机器不需要另装 Node。
 $env:ELECTRON_RUN_AS_NODE = "1"
-& $exe @arguments
-$code = $LASTEXITCODE
+# 应用是 GUI 子系统程序，用 & 调用时 PowerShell 不设置 $LASTEXITCODE（为空会被误判为失败），
+# 所以用 Start-Process 取真实退出码；参数各自加引号，路径里有空格也不会被拆开。
+$quoted = $arguments | ForEach-Object { '"' + $_ + '"' }
+$proc = Start-Process -FilePath $exe -ArgumentList $quoted -NoNewWindow -Wait -PassThru
+$code = $proc.ExitCode
 Remove-Item Env:ELECTRON_RUN_AS_NODE
 if ($code -ne 0) { throw "安装失败（退出码 $code）" }
